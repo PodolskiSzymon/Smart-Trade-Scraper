@@ -1,0 +1,1 @@
+Disclaimer: Ten projekt został stworzony wyłącznie w celach edukacyjnych i akademickich, jako pole do nauki trenowania modeli sztucznej inteligencji (YOLO) oraz inżynierii danych. Projekt nie jest używany w celach komercyjnych, nie obciąża serwerów platformy docelowej (rate limiting) i nie gromadzi danych osobowych użytkowników.
