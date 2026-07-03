@@ -6,8 +6,13 @@ def stworz_strukture_yolo(folder_zdjec, folder_etykiet, folder_docelowy, split_r
     # 1. BEZWZGLĘDNE CZYSZCZENIE STAREGO ZBIORU
     if os.path.exists(folder_docelowy):
         print(f"[INFO] Wykryto stary zbiór danych. Trwa usuwanie folderu: {folder_docelowy}...")
-        shutil.rmtree(folder_docelowy)
-        print("[INFO] Stary zbiór usunięty.")
+        try:
+            shutil.rmtree(folder_docelowy)
+            print("[INFO] Stary zbiór usunięty.")
+        except Exception as e:
+            print(f"[BŁĄD] Nie udało się usunąć starego folderu: {e}")
+            print("[RADA] Zamknij wszystkie okna Eksploratora plików i VS Code, które otwierają ten folder, i spróbuj ponownie.")
+            return # Zatrzymujemy skrypt, bo nie możemy kontynuować
 
     # 2. Tworzenie czystych ścieżek
     dirs_to_make = [
