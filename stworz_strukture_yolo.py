@@ -34,8 +34,8 @@ def stworz_strukture_yolo(folder_zdjec, folder_etykiet, folder_docelowy, split_r
     print(f"\n[INFO] Rozpoczynam kopiowanie {len(pliki_zdjec)} plików do nowej struktury...")
 
     def kopiuj_paczke(lista_plikow, folder_przeznaczenia):
-        skopiowane = 0
-        pominiete = 0
+        skopiowane_z_etykieta = 0
+        utworzone_puste = 0
         
         for plik_img in lista_plikow:
             nazwa_bez_rozszerzenia = os.path.splitext(plik_img)[0]
@@ -43,19 +43,28 @@ def stworz_strukture_yolo(folder_zdjec, folder_etykiet, folder_docelowy, split_r
 
             sciezka_img_src = os.path.join(folder_zdjec, plik_img)
             sciezka_txt_src = os.path.join(folder_etykiet, plik_txt)
+            
+            sciezka_img_dst = os.path.join(folder_docelowy, 'images', folder_przeznaczenia, plik_img)
+            sciezka_txt_dst = os.path.join(folder_docelowy, 'labels', folder_przeznaczenia, plik_txt)
 
-            # Kopiujemy TYLKO jeśli etykieta istnieje (puste pliki dla negative samples też się liczą)
+            # 1. Kopiujemy zdjęcie (to dzieje się zawsze)
+            shutil.copy(sciezka_img_src, sciezka_img_dst)
+
+            # 2. Obsługa etykiet
             if os.path.exists(sciezka_txt_src):
-                shutil.copy(sciezka_img_src, os.path.join(folder_docelowy, 'images', folder_przeznaczenia, plik_img))
-                shutil.copy(sciezka_txt_src, os.path.join(folder_docelowy, 'labels', folder_przeznaczenia, plik_txt))
-                skopiowane += 1
+                # Kopiujemy istniejącą etykietę z folderu etykiety_surowe
+                shutil.copy(sciezka_txt_src, sciezka_txt_dst)
+                skopiowane_z_etykieta += 1
             else:
-                pominiete += 1
+                # Jeśli etykiety nie było, tworzymy PUSTY plik .txt na miejscu (Hard Negative)
+                with open(sciezka_txt_dst, 'w') as f:
+                    pass
+                utworzone_puste += 1
                 
-        return skopiowane, pominiete
+        return skopiowane_z_etykieta, utworzone_puste
 
-    skop_train, pom_train = kopiuj_paczke(train_zdjecia, 'train')
-    skop_val, pom_val = kopiuj_paczke(val_zdjecia, 'val')
+    skop_train, puste_train = kopiuj_paczke(train_zdjecia, 'train')
+    skop_val, puste_val = kopiuj_paczke(val_zdjecia, 'val')
 
     # 4. Automatyczne generowanie pliku data.yaml
     sciezka_yaml = os.path.join(folder_docelowy, 'data.yaml')
@@ -67,8 +76,8 @@ def stworz_strukture_yolo(folder_zdjec, folder_etykiet, folder_docelowy, split_r
         f.write("names: ['microsd']\n")
 
     print(f"\n[SUKCES] Zbudowano nowy, czysty zbiór danych w: {folder_docelowy}")
-    print(f"-> Trening: {skop_train} par (pominięto {pom_train} zdjęć bez etykiet)")
-    print(f"-> Walidacja: {skop_val} par (pominięto {pom_val} zdjęć bez etykiet)")
+    print(f"-> Trening: {skop_train} zdjęć oznaczonych | {puste_train} zdjęć tła (wygenerowano puste pliki)")
+    print(f"-> Walidacja: {skop_val} zdjęć oznaczonych | {puste_val} zdjęć tła (wygenerowano puste pliki)")
     print(f"-> Wygenerowano plik: {sciezka_yaml}")
 
 if __name__ == "__main__":
