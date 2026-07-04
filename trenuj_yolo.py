@@ -27,37 +27,40 @@ def wyznacz_kolejna_nazwe(baza_nazwy="microsd_detektor_v", folder_zapisu=r"runs\
                     
     return f"{baza_nazwy}{max_wersja + 1}_{data_dzisiaj}"
 
-# --- DIAGNOSTYKA GPU ---
-print("--- SPRAWDZANIE ŚRODOWISKA ---")
-if torch.cuda.is_available():
-    nazwa_gpu = torch.cuda.get_device_name(0)
-    print(f"[INFO] Sukces! Wykryto kartę graficzną: {nazwa_gpu}")
-    urzadzenie = 0 
-else:
-    print("[BŁĄD] PyTorch nie widzi karty graficznej (CUDA).")
-    urzadzenie = 'cpu'
-print("------------------------------\n")
 
-# Wyznaczamy nową nazwę z datą
-nazwa_eksperymentu = wyznacz_kolejna_nazwe()
-print(f"[INFO] Ten trening zostanie zapisany jako: {nazwa_eksperymentu}")
+# --- BRAMKARZ DLA WINDOWSA ---
+if __name__ == '__main__':
+    # --- DIAGNOSTYKA GPU ---
+    print("--- SPRAWDZANIE ŚRODOWISKA ---")
+    if torch.cuda.is_available():
+        nazwa_gpu = torch.cuda.get_device_name(0)
+        print(f"[INFO] Sukces! Wykryto kartę graficzną: {nazwa_gpu}")
+        urzadzenie = 0 
+    else:
+        print("[BŁĄD] PyTorch nie widzi karty graficznej (CUDA).")
+        urzadzenie = 'cpu'
+    print("------------------------------\n")
 
-# 1. Pobieramy model bazowy
-model = YOLO('yolov8n.pt')
+    # Wyznaczamy nową nazwę z datą
+    nazwa_eksperymentu = wyznacz_kolejna_nazwe()
+    print(f"[INFO] Ten trening zostanie zapisany jako: {nazwa_eksperymentu}")
 
-print("[INFO] Rozpoczynam trening modelu YOLOv8...")
+    # 1. Pobieramy model bazowy
+    model = YOLO('yolov8n-seg.pt')
 
-# 2. Uruchamiamy trening
-results = model.train(
-    data='F:/WEBSCRAPER/dataset_yolo/data.yaml',
-    epochs=200,            
-    imgsz=640,             
-    batch=16,              
-    patience=30,           
-    optimizer='AdamW',     
-    name=nazwa_eksperymentu, # Używamy zautomatyzowanej nazwy z datą
-    workers=4,             
-    device=urzadzenie      
-)
+    print("[INFO] Rozpoczynam trening modelu YOLOv8...")
 
-print(f"[INFO] Trening zakończony! Wyniki zapisano w: runs/detect/{nazwa_eksperymentu}")
+    # 2. Uruchamiamy trening
+    results = model.train(
+        data='F:/WEBSCRAPER/dataset_yolo/data.yaml',
+        epochs=200,            
+        imgsz=640,             
+        batch=16,              
+        patience=30,           
+        optimizer='AdamW',     
+        name=nazwa_eksperymentu, 
+        workers=4,             
+        device=urzadzenie      
+    )
+
+    print(f"[INFO] Trening zakończony! Wyniki zapisano w: runs/detect/{nazwa_eksperymentu}")
