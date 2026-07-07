@@ -53,5 +53,6 @@ def update_cookies():
     # 2. Zapis do pliku JSON
     with open(COOKIES_FILE, "w", encoding="utf-8") as f:
         json.dump(nowe_ciastka, f, indent=4)
+    return nowe_ciastka
     #print(f"[DISK] Zapisano świeże ciasteczka do {COOKIES_FILE}.") 
 

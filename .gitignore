@@ -8,6 +8,6 @@ dataset_yolo/
 # Zignoruj pliki z wagami AI i folder z logami treningu
 *.pt
 runs/
-
+*.log
 # Zignoruj pliki z ewentualnymi hasłami do bazy danych
 .env

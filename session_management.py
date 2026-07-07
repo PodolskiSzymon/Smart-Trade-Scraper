@@ -94,10 +94,10 @@ def make_boot_session():
     session.cookies.update(cookies)
     
     # 5. Symulujemy wejście na stronę główną (żeby rozgrzać sesję i referery)
-    glowna_url = "https://www.vinted.pl/"
-    session.headers.update({"Referer": glowna_url})
-    response=session.get(glowna_url) # To ciche zapytanie w tle uwiarygadnia nas przed serwerem
-    if response.status_code==401:
-        update_cookies()
-        session.cookies.update(cookies)
+    main_url = "https://www.vinted.pl/"
+    session.headers.update({"Referer": main_url})
+    #response=session.get(main_url) # To ciche zapytanie w tle uwiarygadnia nas przed serwerem
+    # if response.status_code==401:
+    #     update_cookies()
+    #     session.cookies.update(cookies)
     return session
