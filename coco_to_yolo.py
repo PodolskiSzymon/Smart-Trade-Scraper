@@ -75,8 +75,8 @@ def coco_do_yolo_seg_z_folderu(plik_coco_json, folder_zdjec, folder_wyjsciowy):
     print(f"-> Wygenerowano pustych plików (Negative Samples): {puste_pliki}")
 
 if __name__ == "__main__":
-    PLIK_JSON = r"labels_my-project-name_2026-07-04-08-36-54.json" 
-    FOLDER_ZDJEC = r"F:\WEBSCRAPER\wytrenowane_zdjecia" 
+    PLIK_JSON = r"labels_my-project-name_2026-07-08-08-20-52.json" 
+    FOLDER_ZDJEC = r"F:\WEBSCRAPER\do_wytrenowania" 
     FOLDER_DOCELOWY = r"F:\WEBSCRAPER\etykiety_surowe"
     
     coco_do_yolo_seg_z_folderu(PLIK_JSON, FOLDER_ZDJEC, FOLDER_DOCELOWY)

@@ -1,10 +1,11 @@
 from playwright.sync_api import sync_playwright;
 import os;
 import json;
+import logging;
 
-COOKIES_FILE = "cookies.json"
+COOKIES_FILE = "vinted_cookies.json"
 
-def load_cookies_from_file():
+def load_vinted_cookies_from_file():
     """Wczytuje ciastka z pliku na samym starcie programu."""
     if not os.path.exists(COOKIES_FILE):
         print(f"[DISK] Brak pliku {COOKIES_FILE}. Program ruszy z pustą sesją.")
@@ -13,7 +14,23 @@ def load_cookies_from_file():
     with open(COOKIES_FILE, "r", encoding="utf-8") as f:
         print(f"[DISK] Wczytano ciasteczka startowe z pliku {COOKIES_FILE}.")
         return json.load(f)
-    
+
+def load_olx_cookies(file_path="olx_cookies.json"):
+    """
+    Wczytuje ciastka OLX z zewnętrznego pliku JSON.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            cookies = json.load(f)
+            logging.info("[OLX] Pomyślnie załadowano ciastka z pliku.")
+            return cookies
+    except FileNotFoundError:
+        logging.error(f"[OLX BŁĄD] Nie znaleziono pliku: {file_path}")
+        return {}
+    except json.JSONDecodeError as e:
+        logging.error(f"[OLX BŁĄD] Plik {file_path} ma uszkodzony format JSON: {e}")
+        return {}
+
 def zdobadz_nowe_ciastka():
     #print("[AUTH] Uruchamiam Playwright (Chromium)...")
     with sync_playwright() as p:

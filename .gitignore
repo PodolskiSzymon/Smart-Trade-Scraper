@@ -1,13 +1,15 @@
 # Zignoruj foldery ze zdjęciami i etykietami
 zdjecia/
 wytrenowane_zdjecia/
-val_zdj/
+do_wytrenowania/
 etykiety_surowe/
 dataset_yolo/
-
+zdjecia_olx/
+zetykietowane/
 # Zignoruj pliki z wagami AI i folder z logami treningu
 *.pt
 runs/
 *.log
+*.txt
 # Zignoruj pliki z ewentualnymi hasłami do bazy danych
 .env
