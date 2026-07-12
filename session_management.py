@@ -1,5 +1,5 @@
 import os
-from cookies_management import update_cookies, load_vinted_cookies_from_file
+from cookies_management import update_cookies_and_headers, load_vinted_data_from_file
 import requests
 import time
 import uuid
@@ -49,12 +49,16 @@ def make_endpoints_referer(item_id, title):
     return f"https://www.vinted.pl/items/{item_id}-{clean_title}?referrer=catalog"
 
 def update_sesions_cookies(session):
-    new_cookies= update_cookies()
+    """Odświeża zarówno ciastka jak i tokeny w aktywnej sesji."""
+    new_cookies, new_headers = update_cookies_and_headers()
     session.cookies.update(new_cookies)
+    if new_headers:
+        session.headers.update(new_headers)
 
 def make_boot_session():
-    """Tworzy i konfiguruje sesję HTTP do komunikacji z API Vinted."""
-    cookies = load_vinted_cookies_from_file()
+    """Tworzy i konfiguruje sesję HTTP ładując dynamiczne tokeny."""
+    cookies, custom_headers = load_vinted_data_from_file()
+    
     headers = {
         'accept': 'application/json,text/plain,*/*,image/webp',
         'accept-language': 'pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
@@ -67,12 +71,15 @@ def make_boot_session():
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
-        'x-anon-id': 'e6f5e540-66d2-4848-ac99-c9e08762733f',
-        'x-csrf-token': '75f6c9fa-dc8e-4e52-a000-e09dd4084b3e',
     }
 
     session = requests.Session()
     session.headers.update(headers)
+    
+    # Ładujemy ukradzione tokeny z dysku (x-csrf-token i x-anon-id)
+    if custom_headers:
+        session.headers.update(custom_headers)
+        
     session.cookies.update(cookies)
     main_url = "https://www.vinted.pl/"
     session.headers.update({"Referer": main_url})
