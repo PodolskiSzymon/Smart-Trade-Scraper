@@ -18,9 +18,11 @@ ogłoszenia, wyciąga dane gotowe do wysyłki do modelu AI i wysyła alert e-mai
 
 ## Przepływ jednej oferty
 
-1. `GET /api/v2/catalog/items?order=newest_first` → nowe ID (spoza `RecentIds`).
+1. `GET /api/v2/catalog/items` z parametrami z `config.get_catalog_params()` – kopia 1:1
+   `session_management.get_catalog_params` (m.in. `per_page=96`, `order=newest_first`, puste `brand_ids`/`status_ids`/`color_ids`,
+   `time`, `global_search_session_id`), nagłówki z `make_boot_session()` i Referer z `make_main_loop_referer(1)`.
+   Nowe ID = spoza `RecentIds`.
 2. Równolegle: `GET /api/v2/items/{id}/details/sidebar` + `GET /api/v2/items/{id}/shipping_details`
-   (+ `GET /api/v2/users/{seller_id}`, jeśli katalog nie podał kraju sprzedawcy).
 3. Plugin `item_status`: `item_closing_action == "sold"` → oferta ignorowana. Przechodzą tylko
    oferty aktywne (`item_closing_action: null`, a także nie zamknięte, nie zarezerwowane, nie ukryte).
 4. `Offer.to_dict()` trafia do `scout.offers` (`asyncio.Queue` dla przyszłego modułu AI),
@@ -88,7 +90,7 @@ python -m pytest sniper/tests
   zamiast zmiany IP przy każdym żądaniu.
 * **Rozgrzewka**: pierwszy skan tylko zapamiętuje obecne oferty (bez alertów). Wyłączysz to przez
   `SNIPER_SKIP_INITIAL_BATCH=false`.
-* **Duplikaty**: trzymaj `SNIPER_PER_PAGE <= SNIPER_DEDUP_SIZE`. Dodatkowo `RecentIds` pamięta próg
-  (najwyższe wypchnięte ID), więc starsze oferty nie wracają jako „nowe”.
+* **Duplikaty**: katalog zwraca 96 ofert, a `RecentIds` trzyma 20 najnowszych ID. Pamięta też próg
+  (najwyższe wypchnięte ID), więc pozostałe, starsze oferty ze strony nie wracają jako „nowe”.
 * **Onet SMTP**: w ustawieniach skrzynki Onet musi być włączony dostęp przez programy pocztowe (SMTP).
   Hasło podawaj tylko przez `sniper/.env` (plik jest w `.gitignore`).

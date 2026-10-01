@@ -9,7 +9,7 @@ from urllib.parse import unquote, urlsplit
 
 import httpx
 
-from .config import BASE_HEADERS, BASE_URL, USER_AGENT
+from .config import BASE_HEADERS, BASE_URL, BROWSER_USER_AGENT
 from .proxy_relay import ProxyRelay
 
 log = logging.getLogger("sniper.session")
@@ -59,7 +59,7 @@ async def _browse_vinted(playwright_proxy_cfg, wait_ms):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, proxy=playwright_proxy_cfg)
         try:
-            context = await browser.new_context(user_agent=USER_AGENT, locale="pl-PL")
+            context = await browser.new_context(user_agent=BROWSER_USER_AGENT)  # jak cookies_management.py
             page = await context.new_page()
             page.on("request", on_request)
 
@@ -169,7 +169,7 @@ class VintedSession:
 
     async def get_json(self, url, params=None, referer=None):
         """GET z automatycznym odświeżeniem sesji przy 401/403 (jedna ponowna próba)."""
-        headers = {"referer": referer} if referer else None
+        headers = {"Referer": referer} if referer else None  # jak session.headers.update({"Referer": ...})
         for attempt in range(2):
             await self._ready.wait()
             generation = self._generation

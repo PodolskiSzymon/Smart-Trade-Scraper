@@ -11,12 +11,10 @@ import asyncio
 import json
 import logging
 import random
-import time
-import uuid
 
 import httpx
 
-from .config import CATALOG_URL, SHIPPING_URL, SIDEBAR_URL, USER_URL, BASE_URL, ScoutConfig
+from .config import CATALOG_URL, SHIPPING_URL, SIDEBAR_URL, ScoutConfig, get_catalog_params, make_main_loop_referer
 from .dedup import RecentIds
 from .extractor import build_offer, inactive_reason, item_url, unwrap_sidebar
 from .notifier import EmailNotifier
@@ -26,18 +24,15 @@ log = logging.getLogger("sniper.scout")
 
 
 def catalog_params(cfg):
-    return {
-        "page": 1,
-        "per_page": cfg.per_page,
-        "search_text": cfg.search_text,
-        "price_from": cfg.price_from,
-        "price_to": cfg.price_to,
-        "currency": "PLN",
-        "order": "newest_first",
-        "catalog_ids": cfg.catalog_id,
-        "time": str(int(time.time())),
-        "global_search_session_id": str(uuid.uuid4()),
-    }
+    """Jak w main_vinted.run_scraper_cycle: get_catalog_params(category=..., page=1, order='newest_first')."""
+    return get_catalog_params(
+        category=cfg.category,
+        page=1,
+        order='newest_first',
+        search_text=cfg.search_text,
+        price_from=cfg.price_from,
+        price_to=cfg.price_to,
+    )
 
 
 class Scout:
@@ -55,7 +50,7 @@ class Scout:
     # ------------------------------------------------------------------ katalog
     async def poll_catalog(self):
         data = await self.session.get_json(
-            CATALOG_URL, params=catalog_params(self.cfg), referer=f"{BASE_URL}/catalog"
+            CATALOG_URL, params=catalog_params(self.cfg), referer=make_main_loop_referer(1)
         )
         items = data.get("items") or []
         if not items:
@@ -84,25 +79,14 @@ class Scout:
     # ------------------------------------------------------------------ detale
     async def inspect(self, item):
         item_id = item["id"]
-        referer = item_url(item_id, item)
-        seller_id = (item.get("user") or {}).get("id")
-        need_profile = (
-            self.cfg.fetch_seller_profile
-            and seller_id
-            and not (item.get("user") or {}).get("country_title")
-        )
+        referer = item_url(item_id, item)  # jak date_verification.get_sidebar_info: Referer = item['url']
 
         async with self._detail_slots:
-            requests = [
+            sidebar, shipping = await asyncio.gather(
                 self.session.get_json(SIDEBAR_URL.format(item_id=item_id), referer=referer),
                 self.session.get_json(SHIPPING_URL.format(item_id=item_id), referer=referer),
-            ]
-            if need_profile:
-                requests.append(self.session.get_json(USER_URL.format(user_id=seller_id), referer=referer))
-            results = await asyncio.gather(*requests, return_exceptions=True)
-
-        sidebar, shipping = results[0], results[1]
-        profile = results[2] if need_profile else None
+                return_exceptions=True,
+            )
 
         if isinstance(sidebar, Exception):
             log.error("[SCOUT] Brak detali dla %s: %r", item_id, sidebar)
@@ -110,9 +94,6 @@ class Scout:
         if isinstance(shipping, Exception):
             log.warning("[SCOUT] Brak shipping_details dla %s: %r", item_id, shipping)
             shipping = None
-        if isinstance(profile, Exception):
-            log.debug("[SCOUT] Brak profilu sprzedawcy %s: %r", seller_id, profile)
-            profile = None
 
         sidebar = unwrap_sidebar(sidebar)
         reason = inactive_reason(sidebar)
@@ -120,7 +101,7 @@ class Scout:
             log.info("[SCOUT] Pomijam %s - status: %s", item_id, reason)
             return
 
-        offer = build_offer(item_id, sidebar, shipping, catalog_item=item, user_profile=profile)
+        offer = build_offer(item_id, sidebar, shipping, catalog_item=item)
         self.emit(offer)
 
     def emit(self, offer):

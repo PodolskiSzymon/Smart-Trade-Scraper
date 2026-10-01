@@ -1,5 +1,7 @@
 """Konfiguracja Zwiadowcy - wszystko z zmiennych środowiskowych (lub pliku sniper/.env)."""
 import os
+import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
@@ -93,34 +95,73 @@ BASE_URL = "https://www.vinted.pl"
 CATALOG_URL = f"{BASE_URL}/api/v2/catalog/items"
 SIDEBAR_URL = BASE_URL + "/api/v2/items/{item_id}/details/sidebar"
 SHIPPING_URL = BASE_URL + "/api/v2/items/{item_id}/shipping_details"
-USER_URL = BASE_URL + "/api/v2/users/{user_id}"
 
-# Ten sam User-Agent w httpx i w Playwright - cf_clearance/datadome są wiązane z UA.
-USER_AGENT = (
+# ---------------------------------------------------------------------------
+# 1:1 z działającego projektu (session_management.py / cookies_management.py).
+# NIE zmieniać parametr po parametrze - to jest sprawdzony zestaw.
+# ---------------------------------------------------------------------------
+
+# cookies_management.py -> zdobadz_nowe_ciastka_i_headery(): UA kontekstu Playwrighta
+BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 )
 
+# session_management.py -> make_boot_session(): nagłówki sesji + startowy Referer
 BASE_HEADERS = {
-    "accept": "application/json,text/plain,*/*,image/webp",
-    "accept-language": "pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7",
-    "locale": "pl-PL",
-    "priority": "u=3",
-    "sec-ch-ua": '"Chromium";v="149", "Not)A;Brand";v="24"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"Windows"',
-    "sec-fetch-dest": "empty",
-    "sec-fetch-mode": "cors",
-    "sec-fetch-site": "same-origin",
-    "user-agent": USER_AGENT,
-    "referer": f"{BASE_URL}/catalog",
+    'accept': 'application/json,text/plain,*/*,image/webp',
+    'accept-language': 'pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
+    'locale': 'pl-PL',
+    'priority': 'u=3',
+    'sec-ch-ua': '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'empty',
+    'sec-fetch-mode': 'cors',
+    'sec-fetch-site': 'same-origin',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
+    'Referer': "https://www.vinted.pl/",
 }
 
-# Kategorie przeniesione z session_management.py
-CATEGORIES = {
-    "karty_pamieci": 3063,
-    "elektronika": 2994,
+# session_management.py -> categories
+categories = {
+    'karty_pamieci': 3063,
+    'elektronika': 2994,
 }
+CATEGORIES = categories
+
+
+def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', status_ids='', color_ids='', price_from='', price_to=''):
+    """Kopia session_management.get_catalog_params - parametr po parametrze, w tej samej kolejności.
+
+    Jedyna różnica: kategoria spoza słownika (np. "3580") jest używana wprost jako catalog_ids,
+    zamiast rzucać KeyError.
+    """
+    catalog_ids = categories.get(category, category)
+    params = {
+        'page': page,
+        'per_page': 96,
+        'search_text': search_text,
+        'price_from': price_from,
+        'price_to': price_to,
+        'currency': 'PLN',
+        'order': order,
+        'catalog_ids': catalog_ids,
+        'brand_ids': brand_ids,
+        'status_ids': status_ids,
+        'color_ids': color_ids,
+        'time': str(int(time.time())),
+        'global_search_session_id': str(uuid.uuid4())
+    }
+    return params
+
+
+def make_main_loop_referer(page=1):
+    """Kopia session_management.make_main_loop_referer."""
+    if page == 1:
+        return "https://www.vinted.pl/catalog"
+    else:
+        return f"https://www.vinted.pl/catalog?page={page}"
 
 
 @dataclass(frozen=True)
@@ -147,16 +188,12 @@ class ScoutConfig:
     search_text: str = _env("SNIPER_SEARCH_TEXT")
     price_from: str = _env("SNIPER_PRICE_FROM")
     price_to: str = _env("SNIPER_PRICE_TO")
-    # Trzymaj per_page <= dedup_size, wtedy cała strona katalogu mieści się w pamięci duplikatów.
-    per_page: int = _env_int("SNIPER_PER_PAGE", 20)
     dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 20)
 
     poll_interval: float = _env_float("SNIPER_POLL_INTERVAL", 3.0)   # sekundy między skanami katalogu
     poll_jitter: float = _env_float("SNIPER_POLL_JITTER", 1.0)       # losowy dodatek 0..jitter
     max_concurrent_details: int = _env_int("SNIPER_MAX_CONCURRENT_DETAILS", 5)
     request_timeout: float = _env_float("SNIPER_REQUEST_TIMEOUT", 10.0)
-    # Gdy katalog nie podaje kraju sprzedawcy - dociągnij /api/v2/users/{id} (równolegle z detalami).
-    fetch_seller_profile: bool = _env_bool("SNIPER_FETCH_SELLER_PROFILE", True)
     # Pierwszy skan tylko "zapamiętuje" obecne oferty, bez alertów (żeby nie zalać skrzynki).
     skip_initial_batch: bool = _env_bool("SNIPER_SKIP_INITIAL_BATCH", True)
 

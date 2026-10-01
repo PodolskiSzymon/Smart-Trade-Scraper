@@ -76,7 +76,8 @@ def test_scout_end_to_end(monkeypatch):
             items = [{"id": 1, "user": {}}] if calls["catalog"] == 1 else [
                 {"id": 1, "user": {}},
                 {"id": SOLD_ID, "user": {"id": 170581459}},
-                {"id": ACTIVE_ID, "user": {"id": 148344250}, "url": "https://www.vinted.pl/items/9238023547"},
+                {"id": ACTIVE_ID, "url": "https://www.vinted.pl/items/9238023547",
+                 "user": {"id": 148344250, "country_title": "Litwa", "country_iso_code": "LT"}},
             ]
             return httpx.Response(200, json={"items": items})
         if path == f"/api/v2/items/{ACTIVE_ID}/details/sidebar":
@@ -85,8 +86,6 @@ def test_scout_end_to_end(monkeypatch):
             return httpx.Response(200, json=FIX["sidebar_sold"])
         if path.endswith("/shipping_details"):
             return httpx.Response(200, json=FIX["shipping_active"])
-        if path.startswith("/api/v2/users/"):
-            return httpx.Response(200, json={"user": {"country_title": "Litwa", "country_iso_code": "LT"}})
         return httpx.Response(404)
 
     async def scenario():
@@ -257,3 +256,48 @@ def test_loose_requests_and_sync_relay_use_proxy(monkeypatch):
         b"connect www.vinted.pl:443",
     ]
     assert all(expected in h for h in heads)
+
+
+def test_catalog_request_identical_to_session_management(monkeypatch):
+    """Zapytanie do katalogu = 1:1 jak w session_management.py (parametry, kolejność, nagłówki)."""
+    import pytest
+
+    sm = pytest.importorskip("session_management")
+    from sniper.config import BASE_HEADERS, BROWSER_USER_AGENT, get_catalog_params, make_main_loop_referer
+    from sniper.scout import catalog_params
+
+    monkeypatch.setattr("time.time", lambda: 1782723622.5)
+    monkeypatch.setattr("uuid.uuid4", lambda: "00000000-0000-0000-0000-000000000000")
+
+    for kwargs in (
+        dict(category="karty_pamieci", page=1, order="newest_first"),
+        dict(category="elektronika", page=3, order="relevance", search_text="ssd", price_from="10", price_to="99"),
+    ):
+        ours, theirs = get_catalog_params(**kwargs), sm.get_catalog_params(**kwargs)
+        assert list(ours.items()) == list(theirs.items())
+    assert make_main_loop_referer(1) == sm.make_main_loop_referer(1)
+    assert make_main_loop_referer(2) == sm.make_main_loop_referer(2)
+
+    # Zwiadowca woła to tak samo jak main_vinted.run_scraper_cycle
+    cfg = ScoutConfig(category="karty_pamieci", search_text="", price_from="", price_to="")
+    assert list(catalog_params(cfg).items()) == list(sm.get_catalog_params(category="karty_pamieci", page=1, order="newest_first").items())
+    # Kategoria spoza słownika (np. laptopy 3580) idzie wprost jako catalog_ids
+    assert get_catalog_params(category="3580")["catalog_ids"] == "3580"
+
+    # Nagłówki = make_boot_session() (bez dynamicznych tokenów i ciastek z dysku)
+    monkeypatch.setattr(sm, "load_vinted_data_from_file", lambda: ({}, {}))
+    monkeypatch.setattr(sm, "apply_proxies", lambda session: {})
+    boot = sm.make_boot_session()
+    assert {k.lower(): v for k, v in BASE_HEADERS.items()} == {
+        k.lower(): v for k, v in boot.headers.items()
+        if k.lower() not in ("accept-encoding", "connection")  # domyślne nagłówki requests
+    }
+
+    # Request httpx z tymi parametrami ma ten sam query string co requests
+    import requests
+    params = sm.get_catalog_params(category="karty_pamieci")
+    ours_url = httpx.Request("GET", "https://www.vinted.pl/api/v2/catalog/items", params=params).url
+    theirs_url = requests.Request("GET", "https://www.vinted.pl/api/v2/catalog/items", params=params).prepare().url
+    assert str(ours_url) == theirs_url
+
+    assert "Edg/" not in BROWSER_USER_AGENT  # UA Playwrighta z cookies_management.py
