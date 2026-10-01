@@ -10,6 +10,7 @@ from urllib.parse import unquote, urlsplit
 import httpx
 
 from .config import BASE_HEADERS, BASE_URL, USER_AGENT
+from .proxy_relay import ProxyRelay
 
 log = logging.getLogger("sniper.session")
 
@@ -38,11 +39,8 @@ def playwright_proxy(proxy_url):
     return proxy
 
 
-async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
-    """Odpala headless Chromium, wchodzi na Vinted i przechwytuje ciastka + nagłówki.
-
-    Zwraca (lista_ciastek_playwrighta, {"x-csrf-token": ..., "x-anon-id": ...}).
-    """
+async def _browse_vinted(playwright_proxy_cfg, wait_ms):
+    """Jedna wizyta headless Chromium na Vinted. Zwraca (ciastka, przechwycone_nagłówki)."""
     from playwright.async_api import async_playwright
 
     captured = {}
@@ -59,13 +57,12 @@ async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
             api_seen.set()
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, proxy=playwright_proxy(proxy_url))
+        browser = await p.chromium.launch(headless=True, proxy=playwright_proxy_cfg)
         try:
             context = await browser.new_context(user_agent=USER_AGENT, locale="pl-PL")
             page = await context.new_page()
             page.on("request", on_request)
 
-            log.info("[AUTH] Playwright (headless) wchodzi na Vinted po świeże tokeny...")
             await page.goto(f"{BASE_URL}/catalog", wait_until="domcontentloaded", timeout=wait_ms * 2)
 
             try:
@@ -83,6 +80,36 @@ async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
             cookies = await context.cookies()
         finally:
             await browser.close()
+    return cookies, captured
+
+
+async def _browse_via_proxy(proxy_url, wait_ms):
+    cfg = playwright_proxy(proxy_url)
+    if "username" not in cfg and "password" not in cfg:
+        return await _browse_vinted(cfg, wait_ms)
+    # Chromium nie wysyła loginu/hasła do proxy przy HTTPS (ERR_PROXY_AUTH_UNSUPPORTED),
+    # więc idziemy przez lokalny przekaźnik, który sam dokleja Proxy-Authorization.
+    async with ProxyRelay(proxy_url) as relay:
+        return await _browse_vinted({"server": relay.server}, wait_ms)
+
+
+async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
+    """Odpala headless Chromium, wchodzi na Vinted i przechwytuje ciastka + nagłówki.
+
+    Zwraca (lista_ciastek_playwrighta, {"x-csrf-token": ..., "x-anon-id": ...}).
+    Gdy wejście przez proxy się nie uda, próbuje jeszcze raz bez proxy.
+    """
+    log.info("[AUTH] Playwright (headless) wchodzi na Vinted po świeże tokeny (proxy: %s)...",
+             "TAK" if proxy_url else "NIE")
+    if proxy_url:
+        try:
+            cookies, captured = await _browse_via_proxy(proxy_url, wait_ms)
+        except Exception as exc:
+            log.warning("[AUTH] Przeglądarka przez proxy nie dała rady (%s) - próbuję bez proxy.",
+                        str(exc).splitlines()[0])
+            cookies, captured = await _browse_vinted(None, wait_ms)
+    else:
+        cookies, captured = await _browse_vinted(None, wait_ms)
 
     if "x-anon-id" not in captured:
         anon = next((c["value"] for c in cookies if c["name"] == "anon_id"), None)

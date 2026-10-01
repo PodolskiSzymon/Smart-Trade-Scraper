@@ -10,6 +10,7 @@ ogłoszenia, wyciąga dane gotowe do wysyłki do modelu AI i wysyła alert e-mai
 |---|---|
 | `config.py` | Konfiguracja z env / `sniper/.env` (proxy, SMTP, kategoria, tempo). |
 | `dedup.py` | `RecentIds` – `deque(maxlen=20)` + `set` w RAM zamiast PostgreSQL. |
+| `proxy_relay.py` | Lokalny przekaźnik proxy dla Chromium – dokleja `Proxy-Authorization` (Chromium nie obsługuje loginu/hasła do proxy przy HTTPS: `ERR_PROXY_AUTH_UNSUPPORTED`). |
 | `session.py` | `VintedSession` – `httpx.AsyncClient` za proxy; przy 401/403 wstrzymuje wszystkie żądania i odświeża ciastka oraz `x-csrf-token` / `x-anon-id` przez Playwright (async, `headless=True`). |
 | `extractor.py` | Czyste parsowanie JSON-ów: `details/sidebar`, `shipping_details` → `Offer`. |
 | `notifier.py` | Alert e-mail przez `aiosmtplib` (smtp.poczta.onet.pl:465, SSL), wysyłany w tle. |
@@ -66,6 +67,10 @@ python -m pytest sniper/tests
 ```
 
 ## Uwagi
+
+* **Kategoria**: `SNIPER_CATEGORY` przyjmuje nazwę z `config.CATEGORIES` albo bezpośrednio numer `catalog_id` z Vinted (np. `3580`).
+* **Playwright i proxy z hasłem**: przeglądarka łączy się z `127.0.0.1` (przekaźnik), a ten z IPRoyal z Twoim loginem i hasłem.
+  Gdy wejście przez proxy się nie uda, odświeżenie jest ponawiane bez proxy (ostrzeżenie w logu).
 
 * **Proxy i ciastka anty-botowe**: `cf_clearance` / `datadome` są wiązane z IP i User-Agentem.
   Dlatego Playwright domyślnie też idzie przez proxy, a UA jest identyczny w obu klientach.

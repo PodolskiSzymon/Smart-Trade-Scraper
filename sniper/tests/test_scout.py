@@ -108,3 +108,41 @@ def test_scout_end_to_end(monkeypatch):
     offer = scout.offers.get_nowait()
     assert offer["id"] == ACTIVE_ID
     assert offer["seller"]["country"] == "Litwa" and offer["seller"]["country_code"] == "LT"
+
+
+def test_proxy_relay_injects_auth():
+    """Przekaźnik dla Chromium dokleja Proxy-Authorization (fix ERR_PROXY_AUTH_UNSUPPORTED)."""
+    import base64
+    from sniper.proxy_relay import ProxyRelay
+
+    expected = b"Proxy-Authorization: Basic " + base64.b64encode(b"USER:HASLO_country-pl")
+    heads = []
+
+    async def upstream(reader, writer):
+        heads.append(await reader.readuntil(b"\r\n\r\n"))
+        writer.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
+        await writer.drain()
+        writer.write(await reader.read(5))   # echo po zestawieniu tunelu
+        await writer.drain()
+        writer.close()
+
+    async def scenario():
+        server = await asyncio.start_server(upstream, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        async with ProxyRelay(f"http://USER:HASLO_country-pl@127.0.0.1:{port}") as relay:
+            host, rport = relay.server.rsplit("/", 1)[1].split(":")
+            reader, writer = await asyncio.open_connection(host, int(rport))
+            writer.write(b"CONNECT www.vinted.pl:443 HTTP/1.1\r\nHost: www.vinted.pl:443\r\n\r\n")
+            await writer.drain()
+            status = await reader.readuntil(b"\r\n\r\n")
+            writer.write(b"hello")
+            await writer.drain()
+            echoed = await reader.readexactly(5)
+            writer.close()
+        server.close()
+        return status, echoed
+
+    status, echoed = asyncio.run(scenario())
+    assert status.startswith(b"HTTP/1.1 200")
+    assert echoed == b"hello"
+    assert heads[0].startswith(b"CONNECT www.vinted.pl:443") and expected in heads[0]
