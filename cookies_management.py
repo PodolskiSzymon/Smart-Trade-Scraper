@@ -1,4 +1,5 @@
 from playwright.sync_api import sync_playwright
+from sniper.proxy_relay import browser_proxy
 import os
 import json
 import logging
@@ -41,8 +42,8 @@ def load_olx_cookies(file_path="olx_cookies.json"):
         return {}
 
 def zdobadz_nowe_ciastka_i_headery():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False) 
+    with sync_playwright() as p, browser_proxy() as proxy:  # Chromium przez IPRoyal
+        browser = p.chromium.launch(headless=False, proxy=proxy) 
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
         )

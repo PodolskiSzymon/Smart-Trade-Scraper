@@ -3,6 +3,7 @@ from db_management import pobierz_ostatnie_20_id_vinted, zapisz_nowe_id_vinted
 import time
 import os
 import requests
+from sniper.config import requests_proxies
 import logging
 
 # Konfiguracja loggera - zapisuje i do pliku, i wyświetla w konsoli
@@ -82,7 +83,7 @@ def run_scraper_cycle(session, target_category, target_stop_ids):
                     
                     if photo_url:
                         # stream=True jest niezbędne, aby nie zapchać RAMu i użyć iter_content
-                        image_response = requests.get(photo_url, stream=True)
+                        image_response = requests.get(photo_url, stream=True, proxies=requests_proxies())
                         
                         if image_response.status_code == 200:
                             # Tworzymy folder docelowy

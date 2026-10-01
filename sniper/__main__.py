@@ -2,7 +2,7 @@
 import asyncio
 import logging
 
-from .config import ScoutConfig
+from .config import ScoutConfig, require_proxy_url
 from .notifier import EmailNotifier
 from .scout import Scout
 from .session import VintedSession
@@ -23,10 +23,10 @@ def setup_logging(log_file):
 async def main():
     cfg = ScoutConfig()
     setup_logging(cfg.log_file)
+    require_proxy_url()  # bez proxy Zwiadowca w ogóle nie startuje (SNIPER_REQUIRE_PROXY)
 
     session = VintedSession(
         proxy_url=cfg.proxy_url,
-        browser_use_proxy=cfg.browser_use_proxy,
         timeout=cfg.request_timeout,
         browser_wait_ms=cfg.browser_wait_ms,
     )

@@ -1,6 +1,7 @@
 import time
 import os
 import requests
+from sniper.config import requests_proxies
 import logging
 import math
 import sys
@@ -88,7 +89,7 @@ def run_olx_scraper_cycle(target_category, target_stop_ids):
                 },
             }
             
-            response = requests.post(api_url, cookies=olx_cookies, headers=headers, json=json_data)
+            response = requests.post(api_url, cookies=olx_cookies, headers=headers, json=json_data, proxies=requests_proxies())
             
             if response.status_code != 200:
                 logging.error(f"[OLX BŁĄD] Serwer zwrócił kod {response.status_code}.")
@@ -135,7 +136,7 @@ def run_olx_scraper_cycle(target_category, target_stop_ids):
                     if raw_link:
                         photo_url = raw_link.replace('{width}', '525').replace('{height}', '700')
                         
-                        img_response = requests.get(photo_url, stream=True)
+                        img_response = requests.get(photo_url, stream=True, proxies=requests_proxies())
                         if img_response.status_code == 200:
                             folder_docelowy = os.path.join("zdjecia_olx", target_category)
                             os.makedirs(folder_docelowy, exist_ok=True)

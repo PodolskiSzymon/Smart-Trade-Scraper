@@ -8,6 +8,8 @@ Proxy-Authorization i przekazuje ruch do właściwego proxy (np. IPRoyal).
 import asyncio
 import base64
 import logging
+import threading
+from contextlib import contextmanager
 from urllib.parse import unquote, urlsplit
 
 log = logging.getLogger("sniper.proxy_relay")
@@ -88,3 +90,54 @@ class ProxyRelay:
                     except Exception:
                         pass
             self._connections.discard(task)
+
+
+class _ThreadedRelay:
+    """ProxyRelay we własnym wątku z pętlą asyncio - dla kodu synchronicznego (sync_playwright)."""
+
+    def __init__(self, upstream_url):
+        self._relay = ProxyRelay(upstream_url)
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(target=self._loop.run_forever, name="proxy-relay", daemon=True)
+
+    def start(self):
+        self._thread.start()
+        asyncio.run_coroutine_threadsafe(self._relay.__aenter__(), self._loop).result(10)
+        return self._relay.server
+
+    def stop(self):
+        try:
+            asyncio.run_coroutine_threadsafe(self._relay.__aexit__(None, None, None), self._loop).result(10)
+        finally:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+            self._thread.join(5)
+            self._loop.close()
+
+
+@contextmanager
+def browser_proxy(proxy_url=None):
+    """Synchroniczny kontekst dla Playwrighta: zwraca słownik `proxy=` dla chromium.launch().
+
+        with browser_proxy() as proxy:
+            browser = p.chromium.launch(headless=False, proxy=proxy)
+
+    Proxy brane z sniper/.env (require_proxy_url). Gdy ma login/hasło, przeglądarka
+    dostaje lokalny przekaźnik 127.0.0.1, który dokleja Proxy-Authorization.
+    """
+    if proxy_url is None:
+        from .config import require_proxy_url
+
+        proxy_url = require_proxy_url()
+    if not proxy_url:
+        yield None
+        return
+    parts = urlsplit(proxy_url)
+    if not (parts.username or parts.password):
+        yield {"server": proxy_url}
+        return
+    relay = _ThreadedRelay(proxy_url)
+    server = relay.start()
+    try:
+        yield {"server": server}
+    finally:
+        relay.stop()

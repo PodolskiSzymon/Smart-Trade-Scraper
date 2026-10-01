@@ -1,6 +1,7 @@
 import time
 import os
 import requests
+from sniper.config import requests_proxies
 import logging
 import math
 import sys
@@ -84,7 +85,7 @@ def run_vinted_cycle(session, target_category, target_stop_ids):
                         photo_url = main_photo_data.get('full_size_url') or main_photo_data.get('url')
                         
                         if photo_url:
-                            image_response = requests.get(photo_url, stream=True)
+                            image_response = requests.get(photo_url, stream=True, proxies=requests_proxies())
                             if image_response.status_code == 200:
                                 os.makedirs("zdjecia", exist_ok=True)
                                 local_path = os.path.join("zdjecia", f"zdj{item_id}.png")
@@ -126,7 +127,7 @@ def run_olx_cycle(target_category, target_stop_ids):
             current_offset = (curr_page - 1) * limit
             json_data = get_olx_payload(current_offset, limit, target_category)
             
-            response = requests.post(api_url, cookies=olx_cookies, headers=headers, json=json_data)
+            response = requests.post(api_url, cookies=olx_cookies, headers=headers, json=json_data, proxies=requests_proxies())
             
             if response.status_code != 200:
                 logging.error(f"[OLX BŁĄD] Serwer zwrócił kod {response.status_code}.")
@@ -170,7 +171,7 @@ def run_olx_cycle(target_category, target_stop_ids):
                     raw_link = photos[0].get('link')
                     if raw_link:
                         photo_url = raw_link.replace('{width}', '525').replace('{height}', '700')
-                        img_response = requests.get(photo_url, stream=True)
+                        img_response = requests.get(photo_url, stream=True, proxies=requests_proxies())
                         if img_response.status_code == 200:
                             folder_docelowy = os.path.join("zdjecia_olx", target_category)
                             os.makedirs(folder_docelowy, exist_ok=True)

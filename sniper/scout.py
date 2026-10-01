@@ -137,11 +137,13 @@ class Scout:
     async def run(self):
         log.info("=== ZWIADOWCA START | kategoria=%s (%s) | proxy=%s ===",
                  self.cfg.category, self.cfg.catalog_id, "TAK" if self.cfg.proxy_url else "NIE")
-        await self.session.refresh()
-
         backoff = 0.0
+        needs_refresh = True
         while True:
             try:
+                if needs_refresh:
+                    await self.session.refresh()
+                    needs_refresh = False
                 await self.poll_catalog()
                 backoff = 0.0
             except RateLimited:

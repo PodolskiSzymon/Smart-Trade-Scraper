@@ -97,17 +97,12 @@ async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
     """Odpala headless Chromium, wchodzi na Vinted i przechwytuje ciastka + nagłówki.
 
     Zwraca (lista_ciastek_playwrighta, {"x-csrf-token": ..., "x-anon-id": ...}).
-    Gdy wejście przez proxy się nie uda, próbuje jeszcze raz bez proxy.
+    Przeglądarka idzie wyłącznie przez proxy - nie ma ścieżki "bez proxy".
     """
     log.info("[AUTH] Playwright (headless) wchodzi na Vinted po świeże tokeny (proxy: %s)...",
              "TAK" if proxy_url else "NIE")
     if proxy_url:
-        try:
-            cookies, captured = await _browse_via_proxy(proxy_url, wait_ms)
-        except Exception as exc:
-            log.warning("[AUTH] Przeglądarka przez proxy nie dała rady (%s) - próbuję bez proxy.",
-                        str(exc).splitlines()[0])
-            cookies, captured = await _browse_vinted(None, wait_ms)
+        cookies, captured = await _browse_via_proxy(proxy_url, wait_ms)
     else:
         cookies, captured = await _browse_vinted(None, wait_ms)
 
@@ -132,9 +127,8 @@ class VintedSession:
     odpala się tylko raz.
     """
 
-    def __init__(self, proxy_url=None, browser_use_proxy=True, timeout=10.0, browser_wait_ms=15000):
+    def __init__(self, proxy_url=None, timeout=10.0, browser_wait_ms=15000):
         self._proxy_url = proxy_url or None
-        self._browser_proxy = self._proxy_url if browser_use_proxy else None
         self._browser_wait_ms = browser_wait_ms
         self._ready = asyncio.Event()
         self._ready.set()
@@ -158,7 +152,10 @@ class VintedSession:
                 return
             self._ready.clear()
             try:
-                cookies, tokens = await fetch_fresh_tokens(self._browser_proxy, self._browser_wait_ms)
+                try:
+                    cookies, tokens = await fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms)
+                except Exception as exc:
+                    raise SessionExpired(f"Odświeżenie sesji przez Playwright nie powiodło się: {exc}") from exc
                 self.client.cookies.clear()
                 for c in cookies:
                     self.client.cookies.set(c["name"], c["value"], domain=c.get("domain", ""), path=c.get("path", "/"))

@@ -54,9 +54,29 @@ def build_proxy_url():
     return _env("SNIPER_PROXY_URL")
 
 
+class ProxyNotConfigured(RuntimeError):
+    """Brak proxy w .env, a SNIPER_REQUIRE_PROXY=true (domyślnie) - nie wolno wyjść bezpośrednio."""
+
+
+def require_proxy_url():
+    """URL proxy albo wyjątek. Gwarantuje, że żaden ruch nie wyjdzie z pominięciem IPRoyal.
+
+    Ustaw SNIPER_REQUIRE_PROXY=false tylko świadomie (np. testy lokalne) - wtedy brak proxy = ruch bezpośredni.
+    """
+    proxy_url = build_proxy_url()
+    if not proxy_url and _env_bool("SNIPER_REQUIRE_PROXY", True):
+        raise ProxyNotConfigured(
+            "Brak proxy: ustaw SNIPER_PROXY_HOST + SNIPER_PROXY_AUTH (lub SNIPER_PROXY_URL) w sniper/.env"
+        )
+    return proxy_url
+
+
 def requests_proxies(proxy_url=None):
-    """Słownik proxies dla requests.Session: {'http': ..., 'https': ...} (pusty gdy brak proxy)."""
-    proxy_url = build_proxy_url() if proxy_url is None else proxy_url
+    """Słownik proxies dla requests: {'http': ..., 'https': ...}.
+
+    Użycie w luźnych zapytaniach: requests.get(url, proxies=requests_proxies()).
+    """
+    proxy_url = require_proxy_url() if proxy_url is None else proxy_url
     if not proxy_url:
         return {}
     return {"http": proxy_url, "https": proxy_url}
@@ -65,8 +85,7 @@ def requests_proxies(proxy_url=None):
 def apply_proxies(session):
     """Konfiguruje proxy w requests.Session (session.proxies.update(proxies)). Zwraca słownik."""
     proxies = requests_proxies()
-    if proxies:
-        session.proxies.update(proxies)
+    session.proxies.update(proxies)
     return proxies
 
 
@@ -123,8 +142,6 @@ class SmtpConfig:
 class ScoutConfig:
     # Zbudowane z SNIPER_PROXY_HOST + SNIPER_PROXY_AUTH (albo SNIPER_PROXY_URL) - patrz build_proxy_url().
     proxy_url: str = field(default_factory=build_proxy_url)
-    # Czy Playwright też ma iść przez proxy (zalecane - ciastka anty-botowe są wiązane z IP).
-    browser_use_proxy: bool = _env_bool("SNIPER_BROWSER_USE_PROXY", True)
 
     category: str = _env("SNIPER_CATEGORY", "karty_pamieci")
     search_text: str = _env("SNIPER_SEARCH_TEXT")
