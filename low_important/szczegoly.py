@@ -3,10 +3,6 @@ from bs4 import BeautifulSoup;
 import random;
 import time;
 import json;
-import sys as _sys
-from pathlib import Path as _Path
-_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))  # dostęp do pakietu sniper
-from sniper.config import apply_proxies
 
 cookies = {
     'v_udt': 'MGlBYXcxVE1PS0VYYUVtZldVV0UzaHM0UXRDVi0taFZ0NCs1a2hzMnl2M1JoRS0tVWZzYzA2RmdUYlM5Y2JMbU1KTkpHQT09',
@@ -85,7 +81,6 @@ params = {
 
 
 session= requests.session()
-apply_proxies(session)  # proxy IPRoyal z sniper/.env
 
 session.headers.update({
     "User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0",

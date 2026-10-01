@@ -74,21 +74,11 @@ def require_proxy_url():
 
 
 def requests_proxies(proxy_url=None):
-    """Słownik proxies dla requests: {'http': ..., 'https': ...}.
-
-    Użycie w luźnych zapytaniach: requests.get(url, proxies=requests_proxies()).
-    """
+    """Słownik proxies dla requests: {'http': ..., 'https': ...} (używa go sniper.diagnose)."""
     proxy_url = require_proxy_url() if proxy_url is None else proxy_url
     if not proxy_url:
         return {}
     return {"http": proxy_url, "https": proxy_url}
-
-
-def apply_proxies(session):
-    """Konfiguruje proxy w requests.Session (session.proxies.update(proxies)). Zwraca słownik."""
-    proxies = requests_proxies()
-    session.proxies.update(proxies)
-    return proxies
 
 
 BASE_URL = "https://www.vinted.pl"

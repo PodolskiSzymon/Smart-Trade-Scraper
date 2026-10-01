@@ -1,7 +1,6 @@
 import os
 from cookies_management import update_cookies_and_headers, load_vinted_data_from_file
 import requests
-from sniper.config import apply_proxies
 import time
 import uuid
 import re
@@ -76,9 +75,6 @@ def make_boot_session():
 
     session = requests.Session()
     session.headers.update(headers)
-
-    # Proxy IPRoyal z sniper/.env: {'http': 'http://AUTH@HOST', 'https': 'http://AUTH@HOST'}
-    apply_proxies(session)
     
     # Ładujemy ukradzione tokeny z dysku (x-csrf-token i x-anon-id)
     if custom_headers:

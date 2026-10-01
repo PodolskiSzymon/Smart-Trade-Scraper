@@ -70,18 +70,13 @@ python -m pytest sniper/tests
 
 ## Uwagi
 
-* **Proxy IPRoyal – 100% ruchu**: w `sniper/.env` ustaw `SNIPER_PROXY_HOST=geo.iproyal.com:12321` i
+* **Proxy IPRoyal – tylko Zwiadowca**: w `sniper/.env` ustaw `SNIPER_PROXY_HOST=geo.iproyal.com:12321` i
   `SNIPER_PROXY_AUTH=LOGIN:HASLO_country-pl`. `config.build_proxy_url()` składa z tego
-  `http://{proxy_auth}@{proxy}`, a z niego korzystają wszystkie wyjścia do Vinted i OLX:
-  * Zwiadowca (httpx) i jego Playwright (async, przez przekaźnik `ProxyRelay`),
-  * sesje `requests` w starych skryptach – `apply_proxies(session)`,
-  * luźne `requests.get/post` (zdjęcia z CDN Vinted, GraphQL i zdjęcia OLX) – `proxies=requests_proxies()`,
-  * `sync_playwright` w `cookies_management.py`, `getcookies.py`, `download_main_pic_to_train_yolo.py`
-    i `low_important/` – `with browser_proxy() as proxy: p.chromium.launch(..., proxy=proxy)`.
-
-  Bez skonfigurowanego proxy wszystko to rzuca `ProxyNotConfigured` zamiast wyjść bezpośrednio
-  (`SNIPER_REQUIRE_PROXY=true`, domyślnie). Nie ma też żadnego fallbacku „bez proxy”.
-  Poza proxy zostaje tylko: SMTP Onetu (alerty), lokalny PostgreSQL i upload do Google Cloud Storage.
+  `http://{proxy_auth}@{proxy}`. Przez proxy idzie wyłącznie kod z folderu `sniper/`:
+  httpx Zwiadowcy, jego Playwright (przez przekaźnik `ProxyRelay`) i `python -m sniper.diagnose`.
+  Bez skonfigurowanego proxy Zwiadowca rzuca `ProxyNotConfigured` zamiast wyjść bezpośrednio
+  (`SNIPER_REQUIRE_PROXY=true`, domyślnie). Pozostałe skrypty w repozytorium (`main*.py`, OLX,
+  `low_important/` itd.) nie korzystają z proxy i działają z domowego IP.
 * **Kategoria**: `SNIPER_CATEGORY` przyjmuje nazwę z `config.CATEGORIES` albo bezpośrednio numer `catalog_id` z Vinted (np. `3580`).
 * **Playwright i proxy z hasłem**: przeglądarka łączy się z `127.0.0.1` (przekaźnik), a ten z IPRoyal z Twoim loginem i hasłem.
 * **Proxy i ciastka anty-botowe**: `cf_clearance` / `datadome` są wiązane z IP i User-Agentem.

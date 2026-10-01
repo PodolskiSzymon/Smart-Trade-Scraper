@@ -5,11 +5,6 @@ import time;
 import json;
 import os;
 from playwright.sync_api import sync_playwright;
-import sys as _sys
-from pathlib import Path as _Path
-_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))  # dostęp do pakietu sniper
-from sniper.config import apply_proxies
-from sniper.proxy_relay import browser_proxy
 
 COOKIES_FILE = "cookies.json"
 
@@ -25,9 +20,9 @@ def load_cookies_from_file():
     
 def zdobadz_nowe_ciastka():
     print("[AUTH] Uruchamiam Playwright (Chromium)...")
-    with sync_playwright() as p, browser_proxy() as proxy:  # Chromium przez IPRoyal
+    with sync_playwright() as p:
         # Launch w trybie headed=False pozwoli Ci ręcznie przeklikać Cloudflare, jeśli zajdzie potrzeba
-        browser = p.chromium.launch(headless=False, proxy=proxy) 
+        browser = p.chromium.launch(headless=False) 
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
         )
@@ -145,7 +140,6 @@ my_referers = {
 }
 
 session= requests.session()
-apply_proxies(session)  # proxy IPRoyal z sniper/.env
 session.cookies.update(cookies)
 
 session.headers.update({

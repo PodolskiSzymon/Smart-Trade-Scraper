@@ -5,8 +5,6 @@ import time;
 import json;
 import os;
 from playwright.sync_api import sync_playwright
-from sniper.config import apply_proxies, requests_proxies
-from sniper.proxy_relay import browser_proxy
 import uuid
 
 delay = random.uniform(0.5, 1.5) 
@@ -25,9 +23,9 @@ def load_cookies_from_file():
     
 def zdobadz_nowe_ciastka():
     print("[AUTH] Uruchamiam Playwright (Chromium)...")
-    with sync_playwright() as p, browser_proxy() as proxy:  # Chromium przez IPRoyal
+    with sync_playwright() as p:
         # Launch w trybie headed=False pozwoli Ci ręcznie przeklikać Cloudflare, jeśli zajdzie potrzeba
-        browser = p.chromium.launch(headless=False, proxy=proxy) 
+        browser = p.chromium.launch(headless=False) 
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
         )
@@ -147,7 +145,6 @@ my_referers = {
 }
 
 session= requests.session()
-apply_proxies(session)  # proxy IPRoyal z sniper/.env
 session.cookies.update(cookies)
 
 session.headers.update({
@@ -160,7 +157,7 @@ session.headers.update({"Referer": my_referers["glowna"]})
 for i in range(1, 4):
 
     params['page']=i
-    response = requests.get('https://www.vinted.pl/api/v2/catalog/items', params=params, cookies=cookies, headers=headers, proxies=requests_proxies())  
+    response = requests.get('https://www.vinted.pl/api/v2/catalog/items', params=params, cookies=cookies, headers=headers)  
     time.sleep(random.uniform(0.5, 1.5))
     if response.status_code == 400:
         print(f"Osiągnięto koniec katalogu (strona {i}). Zamykam scraper.")
@@ -184,7 +181,7 @@ for i in range(1, 4):
                     all_photos= photo_all_data.get('photos', [])
                     photo_url=all_photos[0].get("url")
                     nazwa_pliku=f"zdj_{licznik}_z_str{params['page']}.png"
-                    photo=requests.get(photo_url, stream=True, proxies=requests_proxies())
+                    photo=requests.get(photo_url, stream=True)
                     os.makedirs("zdjecia", exist_ok=True)
                     with open(f"zdjecia/{nazwa_pliku}", 'wb') as f:
                         for chunk in photo.iter_content(8192):

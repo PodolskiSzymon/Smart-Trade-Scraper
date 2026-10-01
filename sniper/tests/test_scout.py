@@ -150,7 +150,7 @@ def test_proxy_relay_injects_auth():
 def test_iproyal_proxy_from_env(monkeypatch):
     """SNIPER_PROXY_HOST + SNIPER_PROXY_AUTH -> oficjalny słownik proxies IPRoyal."""
     import requests
-    from sniper.config import apply_proxies, build_proxy_url, requests_proxies
+    from sniper.config import build_proxy_url, requests_proxies
 
     monkeypatch.setenv("SNIPER_PROXY_HOST", "geo.iproyal.com:12321")
     monkeypatch.setenv("SNIPER_PROXY_AUTH", "LOGIN:HASLO_country-pl")
@@ -161,7 +161,7 @@ def test_iproyal_proxy_from_env(monkeypatch):
     assert build_proxy_url() == official["https"]
     assert requests_proxies() == official
     session = requests.Session()
-    assert apply_proxies(session) == official
+    session.proxies.update(requests_proxies())
     assert session.proxies == official
     assert ScoutConfig().proxy_url == official["https"]
 
@@ -179,83 +179,16 @@ def test_iproyal_proxy_from_env(monkeypatch):
 
 
 def test_require_proxy_blocks_direct_traffic(monkeypatch):
-    """Bez proxy w .env luźne zapytania nie mogą wyjść bezpośrednio."""
+    """Bez proxy w .env Zwiadowca nie może wyjść bezpośrednio."""
     import pytest
     from sniper.config import ProxyNotConfigured, requests_proxies
-    from sniper.proxy_relay import browser_proxy
 
     for name in ("SNIPER_PROXY_HOST", "SNIPER_PROXY_AUTH", "SNIPER_PROXY_URL", "SNIPER_REQUIRE_PROXY"):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(ProxyNotConfigured):
         requests_proxies()
-    with pytest.raises(ProxyNotConfigured):
-        with browser_proxy():
-            pass
     monkeypatch.setenv("SNIPER_REQUIRE_PROXY", "false")
     assert requests_proxies() == {}
-
-
-def test_loose_requests_and_sync_relay_use_proxy(monkeypatch):
-    """requests.get/post(proxies=requests_proxies()) i browser_proxy() (sync) niosą auth IPRoyal."""
-    import base64
-    import socket
-    import threading
-
-    import requests
-    from sniper.config import requests_proxies
-    from sniper.proxy_relay import browser_proxy
-
-    expected = b"proxy-authorization: basic " + base64.b64encode(b"LOGIN:HASLO_country-pl").lower()
-    heads = []
-    srv = socket.socket()
-    srv.bind(("127.0.0.1", 0))
-    srv.listen(8)
-    port = srv.getsockname()[1]
-
-    def serve():
-        while True:
-            try:
-                conn, _ = srv.accept()
-            except OSError:
-                return
-            data = b""
-            while b"\r\n\r\n" not in data:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
-            heads.append(data.lower())
-            conn.sendall(b"HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-            conn.close()
-
-    threading.Thread(target=serve, daemon=True).start()
-    monkeypatch.setenv("SNIPER_PROXY_HOST", f"127.0.0.1:{port}")
-    monkeypatch.setenv("SNIPER_PROXY_AUTH", "LOGIN:HASLO_country-pl")
-
-    for call in (
-        lambda: requests.get("https://images1.vinted.net/t/x.webp", stream=True, proxies=requests_proxies(), timeout=5),
-        lambda: requests.post("https://www.olx.pl/apigateway/graphql", json={}, proxies=requests_proxies(), timeout=5),
-    ):
-        try:
-            call()
-        except requests.exceptions.ProxyError:
-            pass
-
-    with browser_proxy() as proxy:
-        assert proxy["server"].startswith("http://127.0.0.1:") and str(port) not in proxy["server"]
-        host, rport = proxy["server"].rsplit("/", 1)[1].split(":")
-        with socket.create_connection((host, int(rport)), timeout=5) as s:
-            s.sendall(b"CONNECT www.vinted.pl:443 HTTP/1.1\r\nHost: www.vinted.pl:443\r\n\r\n")
-            assert s.recv(100).startswith(b"HTTP/1.1 502")
-    srv.close()
-
-    targets = [h.split(b"\r\n", 1)[0].rsplit(b" ", 1)[0] for h in heads]
-    assert targets == [
-        b"connect images1.vinted.net:443",
-        b"connect www.olx.pl:443",
-        b"connect www.vinted.pl:443",
-    ]
-    assert all(expected in h for h in heads)
 
 
 def test_catalog_request_identical_to_session_management(monkeypatch):
@@ -286,7 +219,6 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
 
     # Nagłówki = make_boot_session() (bez dynamicznych tokenów i ciastek z dysku)
     monkeypatch.setattr(sm, "load_vinted_data_from_file", lambda: ({}, {}))
-    monkeypatch.setattr(sm, "apply_proxies", lambda session: {})
     boot = sm.make_boot_session()
     assert {k.lower(): v for k, v in BASE_HEADERS.items()} == {
         k.lower(): v for k, v in boot.headers.items()
