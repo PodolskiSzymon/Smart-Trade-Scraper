@@ -1,0 +1,115 @@
+"""Konfiguracja Zwiadowcy - wszystko z zmiennych środowiskowych (lub pliku sniper/.env)."""
+import os
+from dataclasses import dataclass, field
+from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).with_name(".env"))
+except ImportError:  # python-dotenv jest opcjonalny
+    pass
+
+
+def _env(name, default=""):
+    return os.getenv(name, default).strip()
+
+
+def _env_int(name, default):
+    value = _env(name)
+    return int(value) if value else default
+
+
+def _env_float(name, default):
+    value = _env(name)
+    return float(value) if value else default
+
+
+def _env_bool(name, default):
+    value = _env(name).lower()
+    if not value:
+        return default
+    return value in ("1", "true", "yes", "tak", "on")
+
+
+BASE_URL = "https://www.vinted.pl"
+CATALOG_URL = f"{BASE_URL}/api/v2/catalog/items"
+SIDEBAR_URL = BASE_URL + "/api/v2/items/{item_id}/details/sidebar"
+SHIPPING_URL = BASE_URL + "/api/v2/items/{item_id}/shipping_details"
+USER_URL = BASE_URL + "/api/v2/users/{user_id}"
+
+# Ten sam User-Agent w httpx i w Playwright - cf_clearance/datadome są wiązane z UA.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+)
+
+BASE_HEADERS = {
+    "accept": "application/json,text/plain,*/*,image/webp",
+    "accept-language": "pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7",
+    "locale": "pl-PL",
+    "priority": "u=3",
+    "sec-ch-ua": '"Chromium";v="149", "Not)A;Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "user-agent": USER_AGENT,
+    "referer": f"{BASE_URL}/catalog",
+}
+
+# Kategorie przeniesione z session_management.py
+CATEGORIES = {
+    "karty_pamieci": 3063,
+    "elektronika": 2994,
+}
+
+
+@dataclass(frozen=True)
+class SmtpConfig:
+    host: str = _env("SNIPER_SMTP_HOST", "smtp.poczta.onet.pl")
+    port: int = _env_int("SNIPER_SMTP_PORT", 465)
+    username: str = _env("SNIPER_SMTP_USER")          # np. twoj_login@onet.pl
+    password: str = _env("SNIPER_SMTP_PASSWORD")      # <-- TUTAJ hasło do Onetu (przez .env!)
+    sender: str = _env("SNIPER_EMAIL_FROM") or _env("SNIPER_SMTP_USER")
+    recipient: str = _env("SNIPER_EMAIL_TO") or _env("SNIPER_SMTP_USER")
+    timeout: float = _env_float("SNIPER_SMTP_TIMEOUT", 20.0)
+
+    @property
+    def enabled(self):
+        return bool(self.username and self.password and self.recipient)
+
+
+@dataclass(frozen=True)
+class ScoutConfig:
+    # Format: http://USER:HASLO_country-pl@geo.iproyal.com:12321
+    proxy_url: str = _env("SNIPER_PROXY_URL")
+    # Czy Playwright też ma iść przez proxy (zalecane - ciastka anty-botowe są wiązane z IP).
+    browser_use_proxy: bool = _env_bool("SNIPER_BROWSER_USE_PROXY", True)
+
+    category: str = _env("SNIPER_CATEGORY", "karty_pamieci")
+    search_text: str = _env("SNIPER_SEARCH_TEXT")
+    price_from: str = _env("SNIPER_PRICE_FROM")
+    price_to: str = _env("SNIPER_PRICE_TO")
+    # Trzymaj per_page <= dedup_size, wtedy cała strona katalogu mieści się w pamięci duplikatów.
+    per_page: int = _env_int("SNIPER_PER_PAGE", 20)
+    dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 20)
+
+    poll_interval: float = _env_float("SNIPER_POLL_INTERVAL", 3.0)   # sekundy między skanami katalogu
+    poll_jitter: float = _env_float("SNIPER_POLL_JITTER", 1.0)       # losowy dodatek 0..jitter
+    max_concurrent_details: int = _env_int("SNIPER_MAX_CONCURRENT_DETAILS", 5)
+    request_timeout: float = _env_float("SNIPER_REQUEST_TIMEOUT", 10.0)
+    # Gdy katalog nie podaje kraju sprzedawcy - dociągnij /api/v2/users/{id} (równolegle z detalami).
+    fetch_seller_profile: bool = _env_bool("SNIPER_FETCH_SELLER_PROFILE", True)
+    # Pierwszy skan tylko "zapamiętuje" obecne oferty, bez alertów (żeby nie zalać skrzynki).
+    skip_initial_batch: bool = _env_bool("SNIPER_SKIP_INITIAL_BATCH", True)
+
+    browser_wait_ms: int = _env_int("SNIPER_BROWSER_WAIT_MS", 15000)
+    log_file: str = _env("SNIPER_LOG_FILE", "sniper.log")
+
+    smtp: SmtpConfig = field(default_factory=SmtpConfig)
+
+    @property
+    def catalog_id(self):
+        return CATEGORIES.get(self.category, self.category)
