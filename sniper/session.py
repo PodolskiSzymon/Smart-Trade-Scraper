@@ -63,12 +63,15 @@ async def _browse_vinted(playwright_proxy_cfg, wait_ms):
             page = await context.new_page()
             page.on("request", on_request)
 
-            await page.goto(f"{BASE_URL}/catalog", wait_until="domcontentloaded", timeout=wait_ms * 2)
+            # 1:1 jak cookies_management.py: goto (domyślnie czeka na "load") + 4 s na strzały API w tle.
+            await page.goto(f"{BASE_URL}/catalog", timeout=wait_ms * 2)
+            await page.wait_for_timeout(4000)
 
-            try:
-                await asyncio.wait_for(api_seen.wait(), timeout=wait_ms / 1000)
-            except asyncio.TimeoutError:
-                log.warning("[AUTH] Nie złapano żądania API z tokenem - próbuję odczytać go ze strony.")
+            if not api_seen.is_set():
+                try:
+                    await asyncio.wait_for(api_seen.wait(), timeout=wait_ms / 1000)
+                except asyncio.TimeoutError:
+                    log.warning("[AUTH] Nie złapano żądania API z tokenem - próbuję odczytać go ze strony.")
 
             if "x-csrf-token" not in captured:
                 token = await page.evaluate(
@@ -115,6 +118,7 @@ async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
         "[AUTH] Zdobyto %d ciastek, nagłówki: %s",
         len(cookies), ", ".join(sorted(captured)) or "brak",
     )
+    log.info("[AUTH] Ciastka: %s", ", ".join(sorted(c["name"] for c in cookies)))
     return cookies, captured
 
 
@@ -183,5 +187,8 @@ class VintedSession:
                 raise SessionExpired(f"{response.status_code} po odświeżeniu sesji: {url}")
             if response.status_code == 429:
                 raise RateLimited(url)
+            if response.is_error:
+                log.warning("[HTTP] %s %s | server=%s | body: %s", response.status_code, response.url.path,
+                            response.headers.get("server", "?"), response.text[:300].replace("\n", " "))
             response.raise_for_status()
             return response.json()
