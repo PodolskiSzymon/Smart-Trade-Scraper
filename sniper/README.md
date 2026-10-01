@@ -68,6 +68,12 @@ python -m pytest sniper/tests
 
 ## Uwagi
 
+* **Proxy IPRoyal**: w `sniper/.env` ustaw `SNIPER_PROXY_HOST=geo.iproyal.com:12321` i
+  `SNIPER_PROXY_AUTH=LOGIN:HASLO_country-pl`. `config.build_proxy_url()` składa z tego
+  `http://{proxy_auth}@{proxy}`, a `config.requests_proxies()` zwraca słownik
+  `{'http': ..., 'https': ...}`. Używają go: Zwiadowca (httpx), Playwright (przez przekaźnik)
+  oraz stare skrypty na `requests` (`session_management.make_boot_session()`, `getcookies.py`)
+  przez `apply_proxies(session)`.
 * **Kategoria**: `SNIPER_CATEGORY` przyjmuje nazwę z `config.CATEGORIES` albo bezpośrednio numer `catalog_id` z Vinted (np. `3580`).
 * **Playwright i proxy z hasłem**: przeglądarka łączy się z `127.0.0.1` (przekaźnik), a ten z IPRoyal z Twoim loginem i hasłem.
   Gdy wejście przez proxy się nie uda, odświeżenie jest ponawiane bez proxy (ostrzeżenie w logu).

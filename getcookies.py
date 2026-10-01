@@ -5,6 +5,7 @@ import time;
 import json;
 import os;
 from playwright.sync_api import sync_playwright
+from sniper.config import apply_proxies
 
 COOKIES_FILE = "cookies.json"
 
@@ -105,6 +106,7 @@ params = {
 }
 
 session= requests.session()
+apply_proxies(session)  # proxy IPRoyal z sniper/.env
 session.cookies.update(cookies)
 
 session.headers.update({

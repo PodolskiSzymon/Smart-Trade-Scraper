@@ -146,3 +146,34 @@ def test_proxy_relay_injects_auth():
     assert status.startswith(b"HTTP/1.1 200")
     assert echoed == b"hello"
     assert heads[0].startswith(b"CONNECT www.vinted.pl:443") and expected in heads[0]
+
+
+def test_iproyal_proxy_from_env(monkeypatch):
+    """SNIPER_PROXY_HOST + SNIPER_PROXY_AUTH -> oficjalny słownik proxies IPRoyal."""
+    import requests
+    from sniper.config import apply_proxies, build_proxy_url, requests_proxies
+
+    monkeypatch.setenv("SNIPER_PROXY_HOST", "geo.iproyal.com:12321")
+    monkeypatch.setenv("SNIPER_PROXY_AUTH", "LOGIN:HASLO_country-pl")
+    monkeypatch.setenv("SNIPER_PROXY_URL", "http://ignored@example:1")
+    proxy, proxy_auth = "geo.iproyal.com:12321", "LOGIN:HASLO_country-pl"
+    official = {"http": f"http://{proxy_auth}@{proxy}", "https": f"http://{proxy_auth}@{proxy}"}
+
+    assert build_proxy_url() == official["https"]
+    assert requests_proxies() == official
+    session = requests.Session()
+    assert apply_proxies(session) == official
+    assert session.proxies == official
+    assert ScoutConfig().proxy_url == official["https"]
+
+    # requests odczytuje login/hasło dokładnie takie, jak w .env
+    from requests.utils import get_auth_from_url
+    assert get_auth_from_url(session.proxies["https"]) == ("LOGIN", "HASLO_country-pl")
+
+    # Znaki specjalne w haśle są bezpiecznie kodowane, a requests je odkodowuje.
+    monkeypatch.setenv("SNIPER_PROXY_AUTH", "LOGIN:p@ss:word")
+    assert get_auth_from_url(build_proxy_url()) == ("LOGIN", "p@ss:word")
+
+    # Fallback na gotowy URL
+    monkeypatch.delenv("SNIPER_PROXY_HOST")
+    assert build_proxy_url() == "http://ignored@example:1"

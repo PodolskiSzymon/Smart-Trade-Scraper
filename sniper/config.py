@@ -2,6 +2,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     from dotenv import load_dotenv
@@ -30,6 +31,43 @@ def _env_bool(name, default):
     if not value:
         return default
     return value in ("1", "true", "yes", "tak", "on")
+
+
+def build_proxy_url():
+    """Buduje URL proxy według oficjalnego wzorca IPRoyal: http://{proxy_auth}@{proxy}.
+
+    Priorytet:
+      1. SNIPER_PROXY_HOST (np. geo.iproyal.com:12321) + SNIPER_PROXY_AUTH (LOGIN:HASLO_country-pl)
+      2. SNIPER_PROXY_URL  (gotowy http://LOGIN:HASLO_country-pl@geo.iproyal.com:12321)
+    Zwraca "" gdy proxy nie jest skonfigurowane.
+    """
+    proxy = _env("SNIPER_PROXY_HOST")
+    proxy_auth = _env("SNIPER_PROXY_AUTH")
+    if proxy:
+        proxy = proxy.split("://", 1)[-1]          # tolerujemy wpisanie z http://
+        if not proxy_auth:
+            return f"http://{proxy}"
+        login, _, password = proxy_auth.partition(":")
+        # quote() zmienia tylko znaki specjalne (@ : / itd.) - dla zwykłych loginów/haseł
+        # wynik jest identyczny z f'http://{proxy_auth}@{proxy}'.
+        return f"http://{quote(login, safe='')}:{quote(password, safe='')}@{proxy}"
+    return _env("SNIPER_PROXY_URL")
+
+
+def requests_proxies(proxy_url=None):
+    """Słownik proxies dla requests.Session: {'http': ..., 'https': ...} (pusty gdy brak proxy)."""
+    proxy_url = build_proxy_url() if proxy_url is None else proxy_url
+    if not proxy_url:
+        return {}
+    return {"http": proxy_url, "https": proxy_url}
+
+
+def apply_proxies(session):
+    """Konfiguruje proxy w requests.Session (session.proxies.update(proxies)). Zwraca słownik."""
+    proxies = requests_proxies()
+    if proxies:
+        session.proxies.update(proxies)
+    return proxies
 
 
 BASE_URL = "https://www.vinted.pl"
@@ -83,8 +121,8 @@ class SmtpConfig:
 
 @dataclass(frozen=True)
 class ScoutConfig:
-    # Format: http://USER:HASLO_country-pl@geo.iproyal.com:12321
-    proxy_url: str = _env("SNIPER_PROXY_URL")
+    # Zbudowane z SNIPER_PROXY_HOST + SNIPER_PROXY_AUTH (albo SNIPER_PROXY_URL) - patrz build_proxy_url().
+    proxy_url: str = field(default_factory=build_proxy_url)
     # Czy Playwright też ma iść przez proxy (zalecane - ciastka anty-botowe są wiązane z IP).
     browser_use_proxy: bool = _env_bool("SNIPER_BROWSER_USE_PROXY", True)
 
