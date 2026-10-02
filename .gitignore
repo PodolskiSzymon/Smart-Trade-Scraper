@@ -13,3 +13,5 @@ runs/
 *.txt
 # Zignoruj pliki z ewentualnymi hasłami do bazy danych
 .env
+# Surowe odpowiedzi z check_per_page.py (duże) - summary.json można commitować
+per_page_test/per_page_*.json
