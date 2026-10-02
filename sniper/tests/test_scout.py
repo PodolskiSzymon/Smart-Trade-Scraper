@@ -394,3 +394,68 @@ def test_scout_uses_per_page_from_config():
     scout = asyncio.run(scenario())
     assert seen["per_page"] == "20"
     assert scout.seen.maxlen == 100      # 5 x 20, minimum 100
+
+
+def test_refresh_retries_hung_and_reset_attempts(monkeypatch):
+    """Wiszące wejście przeglądarki i zerwane połączenie -> kolejne próby (nowe IP), bez zawieszenia."""
+    import sniper.session as sess
+
+    attempts = {"n": 0}
+
+    async def flaky_tokens(proxy_url=None, wait_ms=0):
+        attempts["n"] += 1
+        if attempts["n"] == 1:
+            await asyncio.sleep(10)                      # strona wisi -> limit czasu
+        if attempts["n"] == 2:
+            raise ConnectionResetError(10054, "Istniejące połączenie zostało gwałtownie zamknięte")
+        return ([{"name": "anon_id", "value": "abc", "domain": ".vinted.pl", "path": "/"}],
+                {"x-csrf-token": "tok", "x-anon-id": "abc"})
+
+    monkeypatch.setattr(sess, "fetch_fresh_tokens", flaky_tokens)
+    monkeypatch.setattr(sess, "REFRESH_RETRY_DELAY", 0)
+
+    async def scenario():
+        session = sess.VintedSession(browser_wait_ms=50)  # limit próby = 0.3 s
+        await session.refresh()
+        token = session.client.headers.get("x-csrf-token")
+        await session.close()
+        return token
+
+    assert asyncio.run(scenario()) == "tok"
+    assert attempts["n"] == 3
+
+
+def test_refresh_gives_up_after_attempts(monkeypatch):
+    import pytest
+    import sniper.session as sess
+
+    async def always_fails(proxy_url=None, wait_ms=0):
+        raise ConnectionResetError(10054, "reset")
+
+    monkeypatch.setattr(sess, "fetch_fresh_tokens", always_fails)
+    monkeypatch.setattr(sess, "REFRESH_RETRY_DELAY", 0)
+
+    async def scenario():
+        session = sess.VintedSession(browser_wait_ms=50)
+        try:
+            await session.refresh()
+        finally:
+            await session.close()
+
+    with pytest.raises(sess.SessionExpired, match="po 3 próbach"):
+        asyncio.run(scenario())
+
+
+def test_connection_reset_is_not_logged_as_error(caplog):
+    import logging
+    from sniper.__main__ import _quiet_connection_resets
+
+    loop = asyncio.new_event_loop()
+    try:
+        with caplog.at_level(logging.DEBUG):
+            _quiet_connection_resets(loop, {"message": "Exception in callback", "exception": ConnectionResetError(10054)})
+            _quiet_connection_resets(loop, {"message": "inny błąd", "exception": ValueError("x")})
+    finally:
+        loop.close()
+    assert any(r.levelname == "DEBUG" and "zerwała" in r.getMessage() for r in caplog.records)
+    assert any(r.levelname == "ERROR" and "inny błąd" in r.getMessage() for r in caplog.records)

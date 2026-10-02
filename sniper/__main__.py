@@ -29,7 +29,21 @@ def setup_logging(log_dir):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
+def _quiet_connection_resets(loop, context):
+    """Zerwane połączenie od proxy (np. WinError 10054 na Windowsie) to nie błąd programu.
+
+    Pętla Proactor na Windowsie loguje je jako ERROR z tracebackiem przy zamykaniu gniazda,
+    chociaż żądanie i tak jest ponawiane. Zapisujemy je tylko w pliku logu (DEBUG).
+    """
+    exc = context.get("exception")
+    if isinstance(exc, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+        logging.getLogger("sniper.net").debug("[NET] Zdalna strona zerwała połączenie: %r", exc)
+        return
+    loop.default_exception_handler(context)
+
+
 async def main():
+    asyncio.get_running_loop().set_exception_handler(_quiet_connection_resets)
     cfg = ScoutConfig()
     setup_logging(cfg.log_dir)
     logging.getLogger("sniper").info("Logi zapisuję do: %s", Path(cfg.log_dir).resolve())

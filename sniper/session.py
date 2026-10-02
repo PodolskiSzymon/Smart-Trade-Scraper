@@ -16,6 +16,8 @@ log = logging.getLogger("sniper.session")
 
 TOKEN_HEADERS = ("x-csrf-token", "x-anon-id")
 AUTH_ERRORS = (401, 403)
+REFRESH_ATTEMPTS = 3
+REFRESH_RETRY_DELAY = 5
 
 
 class SessionExpired(Exception):
@@ -162,10 +164,7 @@ class VintedSession:
                 return
             self._ready.clear()
             try:
-                try:
-                    cookies, tokens = await fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms)
-                except Exception as exc:
-                    raise SessionExpired(f"Odświeżenie sesji przez Playwright nie powiodło się: {exc}") from exc
+                cookies, tokens = await self._fetch_with_retries()
                 self.client.cookies.clear()
                 for c in cookies:
                     self.client.cookies.set(c["name"], c["value"], domain=c.get("domain", ""), path=c.get("path", "/"))
@@ -176,6 +175,27 @@ class VintedSession:
                 log.info("[AUTH] Sesja httpx zaktualizowana (generacja %d).", self._generation)
             finally:
                 self._ready.set()
+
+    async def _fetch_with_retries(self):
+        """Do REFRESH_ATTEMPTS prób, każda z twardym limitem czasu.
+
+        Przy rotacyjnym proxy każde nowe połączenie idzie przez inne IP, więc szybka ponowna próba
+        zwykle pomaga, gdy węzeł wyjściowy zerwie połączenie (WinError 10054) albo strona wisi.
+        """
+        limit = self._browser_wait_ms / 1000 * 6          # domyślnie 90 s na całą wizytę przeglądarki
+        last_error = None
+        for attempt in range(1, REFRESH_ATTEMPTS + 1):
+            try:
+                return await asyncio.wait_for(fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms), limit)
+            except Exception as exc:
+                last_error = exc
+                reason = (str(exc).splitlines() or [""])[0] or type(exc).__name__
+                if attempt < REFRESH_ATTEMPTS:
+                    log.warning("[AUTH] Próba %d/%d odświeżenia nieudana (%s) - ponawiam za %ds (nowe IP).",
+                                attempt, REFRESH_ATTEMPTS, reason, REFRESH_RETRY_DELAY)
+                    await asyncio.sleep(REFRESH_RETRY_DELAY)
+        reason = (str(last_error).splitlines() or [""])[0] or type(last_error).__name__
+        raise SessionExpired(f"Odświeżenie sesji nie powiodło się po {REFRESH_ATTEMPTS} próbach: {reason}") from last_error
 
     async def get_json(self, url, params=None, referer=None, extra_headers=None):
         """GET z automatycznym odświeżeniem sesji przy 401/403 (jedna ponowna próba)."""
