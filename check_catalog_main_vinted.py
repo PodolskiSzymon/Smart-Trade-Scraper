@@ -70,7 +70,7 @@ def main():
 
     base = get_catalog_params(category=cat, page=1, order='newest_first')
     variants = [
-        ("A: main_vinted 1:1 (puste price_from)", base),
+        ("A: main_vinted 1:1 (puste price_from pomijane)", base),
         ("B: jak A, bez pustych parametrów", without_empty(base)),
         ("C: jak A, price_from=0", {**base, 'price_from': '0'}),
         ("D: dokładnie URL z przeglądarki (page=2, price_from=2000)",

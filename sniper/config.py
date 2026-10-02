@@ -150,6 +150,10 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
         'attribute_ids[brand_collection]': brand_collection_ids,
         'attribute_ids[status]': status_ids,
     }
+    # Vinted odrzuca puste price_from= (400 INVALID_REQUEST) - wysyłamy je tylko z wartością,
+    # tak jak przeglądarka. Pozostałe puste pola (search_text, attribute_ids[...]) są akceptowane.
+    if price_from in ('', None):
+        del params['price_from']
     return params
 
 

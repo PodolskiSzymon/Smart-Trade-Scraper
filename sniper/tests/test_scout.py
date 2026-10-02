@@ -299,3 +299,15 @@ def test_scout_sends_curl_headers_to_catalog(monkeypatch):
     www = seen["www.vinted.pl"]
     assert "origin" not in www and www["sec-fetch-site"] == "same-origin"
 
+
+
+def test_empty_price_from_is_not_sent():
+    """Puste price_from= daje 400 INVALID_REQUEST (sprawdzone na żywym API) - nie może trafić do URL."""
+    from sniper.config import CATALOG_URL, get_catalog_params
+
+    url = str(httpx.Request("GET", CATALOG_URL, params=get_catalog_params(category="3580")).url)
+    assert "price_from" not in url
+    assert url == ("https://api.vinted.pl/svc-catalogue/items?page=1&per_page=96&search_text=&currency=PLN"
+                   "&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D="
+                   "&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=")
+    assert get_catalog_params(category="3580", price_from="2000")["price_from"] == "2000"
