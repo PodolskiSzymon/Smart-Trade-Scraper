@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import random
+import time
 
 import httpx
 
@@ -45,6 +46,8 @@ class Scout:
         self._detail_slots = asyncio.Semaphore(cfg.max_concurrent_details)
         self._tasks = set()
         self._first_batch = cfg.skip_initial_batch
+        self._stats = {"polls": 0, "errors": 0, "new": 0, "caught": 0, "last_size": 0, "newest_id": None}
+        self._last_heartbeat = time.monotonic()
 
     # ------------------------------------------------------------------ katalog
     async def poll_catalog(self):
@@ -53,6 +56,10 @@ class Scout:
             referer="https://www.vinted.pl/", extra_headers=CATALOG_ONLY_HEADERS,  # jak w cURL z przeglądarki
         )
         items = data.get("items") or []
+        self._stats["polls"] += 1
+        self._stats["last_size"] = len(items)
+        if items:
+            self._stats["newest_id"] = max(it["id"] for it in items)
         if not items:
             log.warning("[SCOUT] Pusty katalog (klucze odpowiedzi: %s) - możliwy soft-ban. Odświeżam sesję.",
                         ", ".join(data) if isinstance(data, dict) else type(data).__name__)
@@ -67,6 +74,7 @@ class Scout:
             log.info("[SCOUT] Rozgrzewka: zapamiętano %d ofert bez alertów.", len(fresh))
             return
 
+        self._stats["new"] += len(fresh)
         for item in fresh:
             self._spawn(self.inspect(item))
         if fresh:
@@ -110,6 +118,7 @@ class Scout:
         log.info("[ZŁAPANO] %s | %s %s | %s", offer.title, offer.price, offer.currency, offer.url)
         log.debug(json.dumps(payload, ensure_ascii=False))
 
+        self._stats["caught"] += 1
         if self.offers.full():
             self.offers.get_nowait()  # nikt jeszcze nie konsumuje - wyrzucamy najstarszą
         self.offers.put_nowait(payload)
@@ -138,8 +147,28 @@ class Scout:
                 # Błąd proxy/sieci/JSON - przy rotacyjnym proxy następne żądanie pójdzie z innego IP.
                 backoff = min(max(backoff * 2, 2.0), 30.0)
                 log.warning("[SCOUT] Błąd skanu: %r - ponawiam za %.0fs.", exc, backoff)
+                self._stats["errors"] += 1
+            except Exception:
+                # Nieprzewidziany błąd nie może zatrzymać pętli - logujemy pełny traceback i jedziemy dalej.
+                backoff = min(max(backoff * 2, 5.0), 60.0)
+                log.exception("[SCOUT] Nieoczekiwany błąd - ponawiam za %.0fs.", backoff)
+                self._stats["errors"] += 1
 
+            self._heartbeat()
             await asyncio.sleep(backoff or self.cfg.poll_interval + random.uniform(0, self.cfg.poll_jitter))
+
+    def _heartbeat(self):
+        """Co heartbeat_interval sekund jedna linia "żyję" - żeby cisza w logu nie wyglądała na zawieszenie."""
+        interval = self.cfg.heartbeat_interval
+        if not interval or time.monotonic() - self._last_heartbeat < interval:
+            return
+        s = self._stats
+        log.info("[SCOUT] Żyję: %d skanów, %d błędów, nowych %d, złapanych %d w ostatnich %.0fs | "
+                 "katalog: %d ofert, najnowsze ID %s",
+                 s["polls"], s["errors"], s["new"], s["caught"], interval, s["last_size"], s["newest_id"])
+        for key in ("polls", "errors", "new", "caught"):
+            s[key] = 0
+        self._last_heartbeat = time.monotonic()
 
     async def shutdown(self):
         for task in list(self._tasks):

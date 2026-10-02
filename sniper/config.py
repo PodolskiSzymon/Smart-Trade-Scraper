@@ -192,6 +192,7 @@ class ScoutConfig:
 
     poll_interval: float = _env_float("SNIPER_POLL_INTERVAL", 3.0)   # sekundy między skanami katalogu
     poll_jitter: float = _env_float("SNIPER_POLL_JITTER", 1.0)       # losowy dodatek 0..jitter
+    heartbeat_interval: float = _env_float("SNIPER_HEARTBEAT", 60.0)  # co ile sekund log "żyję" (0 = wyłączony)
     max_concurrent_details: int = _env_int("SNIPER_MAX_CONCURRENT_DETAILS", 5)
     request_timeout: float = _env_float("SNIPER_REQUEST_TIMEOUT", 10.0)
     # Pierwszy skan tylko "zapamiętuje" obecne oferty, bez alertów (żeby nie zalać skrzynki).

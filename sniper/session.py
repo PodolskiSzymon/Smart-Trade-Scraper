@@ -63,8 +63,14 @@ async def _browse_vinted(playwright_proxy_cfg, wait_ms):
             page = await context.new_page()
             page.on("request", on_request)
 
-            # 1:1 jak cookies_management.py: goto (domyślnie czeka na "load") + 4 s na strzały API w tle.
-            await page.goto(f"{BASE_URL}/catalog", timeout=wait_ms * 2)
+            # Jak cookies_management.py: wejście + czekanie na "load" + 4 s na strzały API w tle.
+            # Przez proxy pełne "load" (reklamy, trackery) potrafi trwać >30 s - wtedy idziemy dalej,
+            # bo ciastka i tokeny są dostępne już po załadowaniu dokumentu.
+            await page.goto(f"{BASE_URL}/catalog", wait_until="domcontentloaded", timeout=wait_ms * 4)
+            try:
+                await page.wait_for_load_state("load", timeout=wait_ms * 2)
+            except Exception:
+                log.info("[AUTH] Strona nie doszła do 'load' w %ds - kontynuuję z tym, co już jest.", wait_ms * 2 // 1000)
             await page.wait_for_timeout(4000)
 
             if not api_seen.is_set():
