@@ -12,6 +12,7 @@ import json
 import logging
 import random
 import time
+from pathlib import Path
 
 import httpx
 
@@ -119,10 +120,23 @@ class Scout:
         log.debug(json.dumps(payload, ensure_ascii=False))
 
         self._stats["caught"] += 1
+        self._save_offer(payload)
         if self.offers.full():
             self.offers.get_nowait()  # nikt jeszcze nie konsumuje - wyrzucamy najstarszą
         self.offers.put_nowait(payload)
         self.notifier.notify(offer)
+
+    def _save_offer(self, payload):
+        """Dopisuje ofertę jako jedną linię JSON do <log_dir>/offers.jsonl (mikrosekundy, nie blokuje pętli)."""
+        if not self.cfg.log_dir:
+            return
+        try:
+            path = Path(self.cfg.log_dir) / "offers.jsonl"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            log.warning("[SCOUT] Nie zapisałem oferty do offers.jsonl: %s", exc)
 
     # ------------------------------------------------------------------ pętla
     async def run(self):

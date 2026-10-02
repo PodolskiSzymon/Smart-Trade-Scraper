@@ -199,7 +199,8 @@ class ScoutConfig:
     skip_initial_batch: bool = _env_bool("SNIPER_SKIP_INITIAL_BATCH", True)
 
     browser_wait_ms: int = _env_int("SNIPER_BROWSER_WAIT_MS", 15000)
-    log_file: str = _env("SNIPER_LOG_FILE", "sniper.log")
+    # Folder na logi: sniper.log (rotacja co północ, 30 dni) + offers.jsonl (złapane oferty)
+    log_dir: str = _env("SNIPER_LOG_DIR") or str(Path(__file__).with_name("logs"))
 
     smtp: SmtpConfig = field(default_factory=SmtpConfig)
 

@@ -1,6 +1,8 @@
 """Uruchomienie: python -m sniper  (z katalogu głównego repozytorium)."""
 import asyncio
 import logging
+import logging.handlers
+from pathlib import Path
 
 from .config import ScoutConfig, require_proxy_url
 from .notifier import EmailNotifier
@@ -8,21 +10,29 @@ from .scout import Scout
 from .session import VintedSession
 
 
-def setup_logging(log_file):
-    handlers = [logging.StreamHandler()]
-    if log_file:
-        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=handlers,
-    )
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+def setup_logging(log_dir):
+    """Konsola: INFO. Plik sniper/logs/sniper.log: DEBUG (m.in. pełny JSON złapanych ofert), nowy plik co północ."""
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+    console = logging.StreamHandler()
+    console.setLevel(logging.INFO)
+    console.setFormatter(fmt)
+    handlers = [console]
+    if log_dir:
+        Path(log_dir).mkdir(parents=True, exist_ok=True)
+        to_file = logging.handlers.TimedRotatingFileHandler(
+            Path(log_dir) / "sniper.log", when="midnight", backupCount=30, encoding="utf-8")
+        to_file.setLevel(logging.DEBUG)
+        to_file.setFormatter(fmt)
+        handlers.append(to_file)
+    logging.basicConfig(level=logging.DEBUG, handlers=handlers, force=True)
+    for noisy in ("httpx", "httpcore", "asyncio", "aiosmtplib"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 async def main():
     cfg = ScoutConfig()
-    setup_logging(cfg.log_file)
+    setup_logging(cfg.log_dir)
+    logging.getLogger("sniper").info("Logi zapisuję do: %s", Path(cfg.log_dir).resolve())
     require_proxy_url()  # bez proxy Zwiadowca w ogóle nie startuje (SNIPER_REQUIRE_PROXY)
 
     session = VintedSession(
@@ -45,3 +55,7 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         logging.getLogger("sniper").info("=== ZWIADOWCA ZATRZYMANY RĘCZNIE ===")
+    except Exception:
+        # Pełny traceback trafia też do pliku logu, nie tylko na konsolę.
+        logging.getLogger("sniper").exception("=== ZWIADOWCA PRZERWANY BŁĘDEM ===")
+        raise

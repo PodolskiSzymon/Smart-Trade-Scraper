@@ -69,6 +69,13 @@ pip install pytest
 python -m pytest sniper/tests
 ```
 
+## Logi
+
+* `sniper/logs/sniper.log` – wszystko, co widać w konsoli, plus szczegóły (pełny JSON złapanych ofert,
+  tracebacki). Nowy plik co północ, poprzednie jako `sniper.log.RRRR-MM-DD`, trzymane 30 dni.
+* `sniper/logs/offers.jsonl` – każda złapana oferta jako jedna linia JSON (dane dla modułu AI).
+* Folder zmienisz przez `SNIPER_LOG_DIR`. `sniper/logs/` jest w `.gitignore`.
+
 ## Uwagi
 
 * **Proxy IPRoyal – tylko Zwiadowca**: w `sniper/.env` ustaw `SNIPER_PROXY_HOST=geo.iproyal.com:12321` i
