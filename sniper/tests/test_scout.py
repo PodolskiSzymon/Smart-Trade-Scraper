@@ -569,3 +569,41 @@ def test_relay_detects_407_from_proxy():
 
     reply, rejected = asyncio.run(scenario())
     assert reply.startswith(b"HTTP/1.1 407") and rejected
+
+
+def test_session_state_roundtrip(tmp_path):
+    import sniper.session as sess
+
+    path = tmp_path / "session.json"
+    s1 = sess.VintedSession(state_file=path)
+    s1._save_state([{"name": "datadome", "value": "abc", "domain": ".vinted.pl", "path": "/"}],
+                   {"x-csrf-token": "tok", "x-anon-id": "anon"})
+
+    async def scenario(max_age):
+        s2 = sess.VintedSession(state_file=path)
+        ok = s2.load_state(max_age)
+        result = (ok, s2.client.headers.get("x-csrf-token"), s2.client.cookies.get("datadome", domain=".vinted.pl"))
+        await s2.close()
+        return result
+
+    assert asyncio.run(scenario(3600)) == (True, "tok", "abc")
+    assert asyncio.run(scenario(0))[0] is False            # 0 = zawsze nowa sesja
+    data = json.loads(path.read_text())
+    data["saved_at"] -= 7200
+    path.write_text(json.dumps(data))
+    assert asyncio.run(scenario(3600))[0] is False         # za stara
+    asyncio.run(s1.close())
+
+
+def test_light_browser_block_rules():
+    from types import SimpleNamespace
+    from sniper.session import _should_block
+
+    req = lambda url, kind="script": SimpleNamespace(url=url, resource_type=kind)  # noqa: E731
+    assert _should_block(req("https://images1.vinted.net/t/x.webp", "image"))
+    assert _should_block(req("https://www.vinted.pl/font.woff2", "font"))
+    assert _should_block(req("https://www.googletagmanager.com/gtm.js"))
+    assert not _should_block(req("https://www.vinted.pl/catalog", "document"))
+    assert not _should_block(req("https://www.vinted.pl/_next/static/app.js"))
+    assert not _should_block(req("https://api.vinted.pl/svc-catalogue/items", "fetch"))
+    assert not _should_block(req("https://js.datadome.co/tags.js"))

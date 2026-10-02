@@ -108,6 +108,11 @@ python -m sniper.notifier
 * **Odświeżanie sesji**: `SNIPER_REFRESH_ATTEMPTS` prób (domyślnie 6) co `SNIPER_REFRESH_RETRY_DELAY` s (5),
   każda z limitem `SNIPER_REFRESH_TIMEOUT` s (90) i przez nowe IP; po nieudanej serii przerwa `SNIPER_REFRESH_BACKOFF` s (30)
   i kolejna seria. Zerwane połączenia od proxy (WinError 10054) lądują tylko w pliku logu.
+  Przy 407 od IPRoyal (złe hasło, brak transferu) seria jest przerywana od razu z opisem, co sprawdzić.
+* **Oszczędzanie transferu przy odświeżaniu sesji** (pełna wizyta przeglądarki to ~9 MB):
+  `SNIPER_BROWSER_LIGHT=true` blokuje obrazki, wideo, fonty i skrypty reklamowo-analityczne;
+  sesja (ciastka + tokeny) jest zapisywana w `sniper/logs/session.json` i używana po restarcie,
+  jeśli jest młodsza niż `SNIPER_SESSION_MAX_AGE` minut (360). Wygasła sesja = 401/403 = automatyczne odświeżenie.
 * **Proxy i ciastka anty-botowe**: `cf_clearance` / `datadome` są wiązane z IP i User-Agentem.
   Dlatego Playwright też idzie przez proxy, a UA jest identyczny w obu klientach.
   Jeśli po odświeżeniu sesji wciąż lecą 403, rozważ sesję „sticky” w IPRoyal (stały IP przez kilka minut)

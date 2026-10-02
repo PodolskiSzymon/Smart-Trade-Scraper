@@ -202,7 +202,9 @@ class Scout:
                  self.cfg.catalog_id, self.cfg.price_from or "0", self.cfg.price_to or "∞",
                  self.cfg.per_page, self.cfg.poll_interval, "TAK" if self.cfg.proxy_url else "NIE")
         backoff = 0.0
-        needs_refresh = True
+        # Sesja z poprzedniego uruchomienia oszczędza wizytę przeglądarki; jeśli wygasła, pierwszy skan
+        # dostanie 401/403 i get_json sam ją odświeży.
+        needs_refresh = not self.session.load_state(self.cfg.session_max_age_min * 60)
         while True:
             started = time.monotonic()
             try:

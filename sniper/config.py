@@ -214,6 +214,11 @@ class ScoutConfig:
     refresh_retry_delay: float = _env_float("SNIPER_REFRESH_RETRY_DELAY", 5.0)  # s między próbami
     refresh_timeout: float = _env_float("SNIPER_REFRESH_TIMEOUT", 90.0)    # s limitu na jedną próbę
     refresh_backoff: float = _env_float("SNIPER_REFRESH_BACKOFF", 30.0)    # s przerwy po nieudanej serii
+    # Lekka przeglądarka: bez obrazków/wideo/fontów i skryptów reklamowych (wizyta ~9 MB -> ułamek tego).
+    browser_light: bool = _env_bool("SNIPER_BROWSER_LIGHT", True)
+    # Sesja (ciastka + tokeny) zapisywana na dysk i używana po restarcie, jeśli młodsza niż tyle minut
+    # (0 = zawsze nowa sesja przeglądarką). Gdy wygaśnie, 401/403 i tak wywoła odświeżenie.
+    session_max_age_min: float = _env_float("SNIPER_SESSION_MAX_AGE", 360.0)
     # Folder na logi: sniper.log (rotacja co północ, 30 dni) + offers.jsonl (złapane oferty)
     log_dir: str = _env("SNIPER_LOG_DIR") or str(Path(__file__).with_name("logs"))
 

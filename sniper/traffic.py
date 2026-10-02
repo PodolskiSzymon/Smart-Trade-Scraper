@@ -72,17 +72,24 @@ class TrafficMeter:
                              f", wysł. {fmt_bytes(b['sent'])})")
         window_total = self._sum(self._window)
         all_total = self._sum(self.total)
-        per_hour = all_total / total_s * 3600
+        browser_total = self.total["browser"]["sent"] + self.total["browser"]["received"]
+        # Tempo skanowania bez jednorazowych wizyt przeglądarki - inaczej start zawyża prognozę wielokrotnie.
+        per_hour = (all_total - browser_total) / total_s * 3600
         row = {
             "window_s": round(window_s, 1),
             **{f"{c}_bytes": self._window[c]["sent"] + self._window[c]["received"] for c in CATEGORIES},
             **{f"{c}_requests": self._window[c]["requests"] for c in CATEGORIES},
             "window_bytes": window_total,
             "total_bytes": all_total,
-            "mb_per_hour": round(per_hour / 1024 / 1024, 3),
+            "scan_mb_per_hour": round(per_hour / 1024 / 1024, 3),
+            "browser_visits_total": self.total["browser"]["requests"],
+            "browser_bytes_total": browser_total,
         }
+        visits = self.total["browser"]["requests"]
         text = (f"Transfer ({window_s:.0f}s): {fmt_bytes(window_total)} = " + ("; ".join(parts) or "brak ruchu")
-                + f" | od startu {fmt_bytes(all_total)} | tempo ~{fmt_bytes(per_hour)}/h, ~{fmt_bytes(per_hour * 24)}/dobę")
+                + f" | od startu {fmt_bytes(all_total)} | skanowanie ~{fmt_bytes(per_hour)}/h, ~{fmt_bytes(per_hour * 24)}/dobę"
+                + f" | przeglądarka: {visits} wizyt, {fmt_bytes(browser_total)}"
+                + (f" (śr. {fmt_bytes(browser_total / visits)}/wizytę)" if visits else ""))
         self._window = {c: {"sent": 0, "received": 0, "requests": 0} for c in CATEGORIES}
         self._window_started = now
         return text, row
