@@ -1,7 +1,5 @@
 """Konfiguracja Zwiadowcy - wszystko z zmiennych środowiskowych (lub pliku sniper/.env)."""
 import os
-import time
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import quote
@@ -92,29 +90,38 @@ SHIPPING_URL = BASE_URL + "/api/v2/items/{item_id}/shipping_details"
 # NIE zmieniać parametr po parametrze - to jest sprawdzony zestaw.
 # ---------------------------------------------------------------------------
 
-# cookies_management.py -> zdobadz_nowe_ciastka_i_headery(): UA kontekstu Playwrighta
+# UA identyczny z działającym zapytaniem (cURL z przeglądarki) - cf_clearance/datadome są wiązane z UA,
+# więc Playwright (który zdobywa te ciastka) i httpx muszą się przedstawiać tak samo.
 BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
+    "(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0"
 )
 
-# session_management.py -> make_boot_session(): nagłówki sesji + startowy Referer
-BASE_HEADERS = {
-    'accept': 'application/json,text/plain,*/*,image/webp',
+# Nagłówki 1:1 z działającego zapytania do api.vinted.pl/svc-catalogue/items (cURL z przeglądarki),
+# bez ciastek i tokenów (x-csrf-token / x-anon-id dochodzą z Playwrighta).
+CATALOG_HEADERS = {
+    'accept': 'application/json, text/plain, */*',
     'accept-language': 'pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
     'locale': 'pl-PL',
-    'priority': 'u=3',
-    'sec-ch-ua': '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+    'origin': 'https://www.vinted.pl',
+    'platform': 'web',
+    'priority': 'u=1, i',
+    'referer': 'https://www.vinted.pl/',
+    'sec-ch-ua': '"Chromium";v="154", "Microsoft Edge";v="154", "Not A(Brand";v="99"',
     'sec-ch-ua-mobile': '?0',
     'sec-ch-ua-platform': '"Windows"',
     'sec-fetch-dest': 'empty',
     'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
-    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
-    'platform': 'web',
+    'sec-fetch-site': 'same-site',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0',
     'x-next-app': 'marketplace-web',
-    'Referer': "https://www.vinted.pl/",
 }
+
+# Zapytania do www.vinted.pl/api/v2/... (sidebar, shipping_details) to dla przeglądarki ta sama domena:
+# bez 'origin', z 'sec-fetch-site: same-origin'.
+BASE_HEADERS = {k: v for k, v in CATALOG_HEADERS.items() if k != 'origin'}
+BASE_HEADERS['sec-fetch-site'] = 'same-origin'
+CATALOG_ONLY_HEADERS = {'origin': CATALOG_HEADERS['origin'], 'sec-fetch-site': CATALOG_HEADERS['sec-fetch-site']}
 
 # session_management.py -> categories
 categories = {
@@ -124,8 +131,8 @@ categories = {
 CATEGORIES = categories
 
 
-def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', status_ids='', color_ids='', price_from='', price_to=''):
-    """Kopia session_management.get_catalog_params - parametr po parametrze, w tej samej kolejności.
+def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', brand_collection_ids='', status_ids='', price_from=''):
+    """Kopia session_management.get_catalog_params - parametry 1:1 z działającego zapytania (cURL z przeglądarki).
 
     Jedyna różnica: kategoria spoza słownika (np. "3580") jest używana wprost jako attribute_ids[catalog],
     zamiast rzucać KeyError.
@@ -136,15 +143,12 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
         'per_page': 96,
         'search_text': search_text,
         'price_from': price_from,
-        'price_to': price_to,
         'currency': 'PLN',
         'order': order,
         'attribute_ids[catalog]': catalog_ids,
         'attribute_ids[brand]': brand_ids,
+        'attribute_ids[brand_collection]': brand_collection_ids,
         'attribute_ids[status]': status_ids,
-        'attribute_ids[color]': color_ids,
-        'time': str(int(time.time())),
-        'global_search_session_id': str(uuid.uuid4())
     }
     return params
 
@@ -180,7 +184,6 @@ class ScoutConfig:
     category: str = _env("SNIPER_CATEGORY", "karty_pamieci")
     search_text: str = _env("SNIPER_SEARCH_TEXT")
     price_from: str = _env("SNIPER_PRICE_FROM")
-    price_to: str = _env("SNIPER_PRICE_TO")
     dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 20)
 
     poll_interval: float = _env_float("SNIPER_POLL_INTERVAL", 3.0)   # sekundy między skanami katalogu

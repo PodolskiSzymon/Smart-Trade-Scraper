@@ -171,13 +171,15 @@ class VintedSession:
             finally:
                 self._ready.set()
 
-    async def get_json(self, url, params=None, referer=None):
+    async def get_json(self, url, params=None, referer=None, extra_headers=None):
         """GET z automatycznym odświeżeniem sesji przy 401/403 (jedna ponowna próba)."""
-        headers = {"Referer": referer} if referer else None  # jak session.headers.update({"Referer": ...})
+        headers = dict(extra_headers or {})
+        if referer:
+            headers["referer"] = referer
         for attempt in range(2):
             await self._ready.wait()
             generation = self._generation
-            response = await self.client.get(url, params=params, headers=headers)
+            response = await self.client.get(url, params=params, headers=headers or None)
 
             if response.status_code in AUTH_ERRORS:
                 if attempt == 0:

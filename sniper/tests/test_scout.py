@@ -196,15 +196,12 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
     import pytest
 
     sm = pytest.importorskip("session_management")
-    from sniper.config import BASE_HEADERS, BROWSER_USER_AGENT, get_catalog_params, make_main_loop_referer
+    from sniper.config import BROWSER_USER_AGENT, CATALOG_HEADERS, get_catalog_params, make_main_loop_referer
     from sniper.scout import catalog_params
-
-    monkeypatch.setattr("time.time", lambda: 1782723622.5)
-    monkeypatch.setattr("uuid.uuid4", lambda: "00000000-0000-0000-0000-000000000000")
 
     for kwargs in (
         dict(category="karty_pamieci", page=1, order="newest_first"),
-        dict(category="elektronika", page=3, order="relevance", search_text="ssd", price_from="10", price_to="99"),
+        dict(category="elektronika", page=3, order="relevance", search_text="ssd", price_from="10"),
     ):
         ours, theirs = get_catalog_params(**kwargs), sm.get_catalog_params(**kwargs)
         assert list(ours.items()) == list(theirs.items())
@@ -214,7 +211,7 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
     assert make_main_loop_referer(2) == sm.make_main_loop_referer(2)
 
     # Zwiadowca woła to tak samo jak main_vinted.run_scraper_cycle
-    cfg = ScoutConfig(category="karty_pamieci", search_text="", price_from="", price_to="")
+    cfg = ScoutConfig(category="karty_pamieci", search_text="", price_from="")
     assert list(catalog_params(cfg).items()) == list(sm.get_catalog_params(category="karty_pamieci", page=1, order="newest_first").items())
     # Kategoria spoza słownika (np. laptopy 3580) idzie wprost jako attribute_ids[catalog]
     assert get_catalog_params(category="3580")["attribute_ids[catalog]"] == "3580"
@@ -222,7 +219,7 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
     # Nagłówki = make_boot_session() (bez dynamicznych tokenów i ciastek z dysku)
     monkeypatch.setattr(sm, "load_vinted_data_from_file", lambda: ({}, {}))
     boot = sm.make_boot_session()
-    assert {k.lower(): v for k, v in BASE_HEADERS.items()} == {
+    assert {k.lower(): v for k, v in CATALOG_HEADERS.items()} == {
         k.lower(): v for k, v in boot.headers.items()
         if k.lower() not in ("accept-encoding", "connection")  # domyślne nagłówki requests
     }
@@ -234,4 +231,71 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
     theirs_url = requests.Request("GET", sm.CATALOG_URL, params=params).prepare().url
     assert str(ours_url) == theirs_url
 
-    assert "Edg/" not in BROWSER_USER_AGENT  # UA Playwrighta z cookies_management.py
+    # Playwright przedstawia się tak samo jak httpx (cf_clearance/datadome są wiązane z UA)
+    assert BROWSER_USER_AGENT == CATALOG_HEADERS["user-agent"]
+
+
+# Działające zapytanie z przeglądarki (cURL od użytkownika, 2026-10-02) - bez ciastek i tokenów.
+CURL_URL = ("https://api.vinted.pl/svc-catalogue/items?page=2&per_page=96&search_text=&price_from=2000"
+            "&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D="
+            "&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=")
+CURL_HEADERS = {
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7",
+    "locale": "pl-PL",
+    "origin": "https://www.vinted.pl",
+    "platform": "web",
+    "priority": "u=1, i",
+    "referer": "https://www.vinted.pl/",
+    "sec-ch-ua": '"Chromium";v="154", "Microsoft Edge";v="154", "Not A(Brand";v="99"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-site",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0",
+    "x-next-app": "marketplace-web",
+}
+
+
+def test_catalog_request_matches_browser_curl():
+    """URL i nagłówki zapytania do katalogu = znak w znak jak w działającym cURL z przeglądarki."""
+    import requests
+    from sniper.config import CATALOG_HEADERS, CATALOG_ONLY_HEADERS, CATALOG_URL, BASE_HEADERS, get_catalog_params
+
+    params = get_catalog_params(category="3580", page=2, order="newest_first", price_from="2000")
+    assert str(httpx.Request("GET", CATALOG_URL, params=params).url) == CURL_URL
+    assert requests.Request("GET", CATALOG_URL, params=params).prepare().url == CURL_URL
+    assert CATALOG_HEADERS == CURL_HEADERS
+
+    # Zwiadowca: nagłówki klienta + dodatki dla katalogu + Referer = komplet z cURL
+    sent = {**BASE_HEADERS, **CATALOG_ONLY_HEADERS, "referer": "https://www.vinted.pl/"}
+    assert sent == CURL_HEADERS
+
+
+def test_scout_sends_curl_headers_to_catalog(monkeypatch):
+    """Zwiadowca wysyła do api.vinted.pl dokładnie nagłówki z cURL, a do www.vinted.pl/api/v2 - same-origin."""
+    seen = {}
+
+    def handler(request):
+        seen[request.url.host] = dict(request.headers)
+        if request.url.host == "api.vinted.pl":
+            return httpx.Response(200, json={"items": [{"id": 1, "user": {}}]})
+        return httpx.Response(200, json={})
+
+    async def scenario():
+        session = VintedSession()
+        session.client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers=session.client.headers)
+        scout = Scout(ScoutConfig(category="3580", search_text="", price_from=""), session, EmailNotifier(SmtpConfig()))
+        await scout.poll_catalog()
+        await session.get_json("https://www.vinted.pl/api/v2/items/1/shipping_details", referer="https://www.vinted.pl/items/1")
+        await session.close()
+
+    asyncio.run(scenario())
+    api = seen["api.vinted.pl"]
+    for name, value in CURL_HEADERS.items():
+        assert api.get(name) == value, name
+    www = seen["www.vinted.pl"]
+    assert "origin" not in www and www["sec-fetch-site"] == "same-origin"
+

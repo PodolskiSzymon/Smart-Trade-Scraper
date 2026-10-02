@@ -14,7 +14,7 @@ import random
 
 import httpx
 
-from .config import CATALOG_URL, SHIPPING_URL, SIDEBAR_URL, ScoutConfig, get_catalog_params, make_main_loop_referer
+from .config import CATALOG_ONLY_HEADERS, CATALOG_URL, SHIPPING_URL, SIDEBAR_URL, ScoutConfig, get_catalog_params
 from .dedup import RecentIds
 from .extractor import build_offer, inactive_reason, item_url, unwrap_sidebar
 from .notifier import EmailNotifier
@@ -24,14 +24,13 @@ log = logging.getLogger("sniper.scout")
 
 
 def catalog_params(cfg):
-    """Jak w main_vinted.run_scraper_cycle: get_catalog_params(category=..., page=1, order='newest_first')."""
+    """Strona 1, najnowsze - parametry 1:1 z działającego zapytania do svc-catalogue (patrz config.get_catalog_params)."""
     return get_catalog_params(
         category=cfg.category,
         page=1,
         order='newest_first',
         search_text=cfg.search_text,
         price_from=cfg.price_from,
-        price_to=cfg.price_to,
     )
 
 
@@ -50,7 +49,8 @@ class Scout:
     # ------------------------------------------------------------------ katalog
     async def poll_catalog(self):
         data = await self.session.get_json(
-            CATALOG_URL, params=catalog_params(self.cfg), referer=make_main_loop_referer(1)
+            CATALOG_URL, params=catalog_params(self.cfg),
+            referer="https://www.vinted.pl/", extra_headers=CATALOG_ONLY_HEADERS,  # jak w cURL z przeglądarki
         )
         items = data.get("items") or []
         if not items:

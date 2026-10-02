@@ -18,11 +18,11 @@ ogłoszenia, wyciąga dane gotowe do wysyłki do modelu AI i wysyła alert e-mai
 
 ## Przepływ jednej oferty
 
-1. `GET https://api.vinted.pl/svc-catalogue/items` (nowy endpoint katalogu) z parametrami z `config.get_catalog_params()`
-   – układ jak w `session_management.get_catalog_params` (`per_page=96`, `order=newest_first`, `time`,
-   `global_search_session_id`), z filtrami jako `attribute_ids[catalog]` / `[brand]` / `[status]` / `[color]`.
-   Nagłówki z `make_boot_session()` (w tym `platform: web` i `x-next-app: marketplace-web`), Referer z
-   `make_main_loop_referer(1)`. Nowe ID = spoza `RecentIds`.
+1. `GET https://api.vinted.pl/svc-catalogue/items` – parametry i nagłówki 1:1 z działającego zapytania
+   przeglądarki (cURL z F12): `page`, `per_page=96`, `search_text`, `price_from`, `currency=PLN`, `order=newest_first`,
+   `attribute_ids[catalog]` / `[brand]` / `[brand_collection]` / `[status]`. Nagłówki `config.CATALOG_HEADERS`
+   (m.in. `origin`, `sec-fetch-site: same-site`, `platform: web`, `x-next-app: marketplace-web`, Edge 154),
+   plus świeże `x-csrf-token` / `x-anon-id`. Nowe ID = spoza `RecentIds`.
 2. Równolegle: `GET /api/v2/items/{id}/details/sidebar` + `GET /api/v2/items/{id}/shipping_details`
 3. Plugin `item_status`: `item_closing_action == "sold"` → oferta ignorowana. Przechodzą tylko
    oferty aktywne (`item_closing_action: null`, a także nie zamknięte, nie zarezerwowane, nie ukryte).

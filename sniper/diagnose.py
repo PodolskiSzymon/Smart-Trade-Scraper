@@ -15,8 +15,8 @@ import httpx
 import requests
 
 from .config import (
-    BASE_HEADERS, BROWSER_USER_AGENT, CATALOG_URL, ScoutConfig,
-    get_catalog_params, make_main_loop_referer, require_proxy_url, requests_proxies,
+    BROWSER_USER_AGENT, CATALOG_HEADERS, CATALOG_URL, ScoutConfig,
+    get_catalog_params, require_proxy_url, requests_proxies,
 )
 from .proxy_relay import ProxyRelay
 
@@ -79,12 +79,12 @@ async def browser_phase(proxy_url, params, headed):
 
 
 def httpx_phase(proxy_url, cookies, tokens, params):
-    client = httpx.Client(proxy=proxy_url, headers=BASE_HEADERS, timeout=20, follow_redirects=True)
+    client = httpx.Client(proxy=proxy_url, headers=CATALOG_HEADERS, timeout=20, follow_redirects=True)
     for c in cookies:
         client.cookies.set(c["name"], c["value"], domain=c.get("domain", ""), path=c.get("path", "/"))
     client.headers.update(tokens)
     try:
-        r = client.get(CATALOG_URL, params=params, headers={"Referer": make_main_loop_referer(1)})
+        r = client.get(CATALOG_URL, params=params)
         return r.status_code, r.text
     except Exception as exc:
         return "ERR", repr(exc)
@@ -94,11 +94,10 @@ def httpx_phase(proxy_url, cookies, tokens, params):
 
 def requests_phase(cookies, tokens, params):
     session = requests.Session()
-    session.headers.update(BASE_HEADERS)
+    session.headers.update(CATALOG_HEADERS)
     session.proxies.update(requests_proxies())
     session.headers.update(tokens)
     session.cookies.update({c["name"]: c["value"] for c in cookies})
-    session.headers.update({"Referer": make_main_loop_referer(1)})
     try:
         r = session.get(CATALOG_URL, params=params, timeout=20)
         return r.status_code, r.text
@@ -111,7 +110,7 @@ def main():
     cfg = ScoutConfig()
     proxy_url = require_proxy_url()
     params = get_catalog_params(category=cfg.category, page=1, order="newest_first",
-                                search_text=cfg.search_text, price_from=cfg.price_from, price_to=cfg.price_to)
+                                search_text=cfg.search_text, price_from=cfg.price_from)
     print("=== DIAGNOSTYKA ZWIADOWCY ===")
     print(f"Kategoria: {cfg.category} | proxy: TAK | tryb przeglądarki: {'headed' if headed else 'headless'}")
     print("Parametry:", json.dumps({k: v for k, v in params.items()}, ensure_ascii=False))

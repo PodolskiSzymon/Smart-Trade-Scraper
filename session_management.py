@@ -1,8 +1,6 @@
 import os
 from cookies_management import update_cookies_and_headers, load_vinted_data_from_file
 import requests
-import time
-import uuid
 import re
 
 # Nowy endpoint katalogu (Vinted przeniósł listę ogłoszeń z www.vinted.pl/api/v2/catalog/items)
@@ -13,22 +11,19 @@ categories={
     'elektronika':2994,
 }
 
-def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', status_ids='', color_ids='', price_from='', price_to=''):
+def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', brand_collection_ids='', status_ids='', price_from=''):
     catalog_ids = categories[category]
     params = {
         'page': page,
         'per_page': 96,
         'search_text': search_text,
         'price_from': price_from,
-        'price_to': price_to,
         'currency': 'PLN',
         'order': order,
         'attribute_ids[catalog]': catalog_ids,
         'attribute_ids[brand]': brand_ids,
+        'attribute_ids[brand_collection]': brand_collection_ids,
         'attribute_ids[status]': status_ids,
-        'attribute_ids[color]': color_ids,
-        'time': str(int(time.time())),
-        'global_search_session_id': str(uuid.uuid4())
     }
     return params
 
@@ -62,19 +57,22 @@ def make_boot_session():
     """Tworzy i konfiguruje sesję HTTP ładując dynamiczne tokeny."""
     cookies, custom_headers = load_vinted_data_from_file()
     
+    # Nagłówki 1:1 z działającego zapytania do api.vinted.pl/svc-catalogue/items (cURL z przeglądarki)
     headers = {
-        'accept': 'application/json,text/plain,*/*,image/webp',
+        'accept': 'application/json, text/plain, */*',
         'accept-language': 'pl,en;q=0.9,en-GB;q=0.8,en-US;q=0.7',
         'locale': 'pl-PL',
-        'priority': 'u=3',
-        'sec-ch-ua': '"Microsoft Edge";v="149", "Chromium";v="149", "Not)A;Brand";v="24"',
+        'origin': 'https://www.vinted.pl',
+        'platform': 'web',
+        'priority': 'u=1, i',
+        'referer': 'https://www.vinted.pl/',
+        'sec-ch-ua': '"Chromium";v="154", "Microsoft Edge";v="154", "Not A(Brand";v="99"',
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': '"Windows"',
         'sec-fetch-dest': 'empty',
         'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
-        'platform': 'web',
+        'sec-fetch-site': 'same-site',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0',
         'x-next-app': 'marketplace-web',
     }
 
