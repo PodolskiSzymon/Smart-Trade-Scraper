@@ -56,7 +56,7 @@ def test_late_published_low_id_is_detected(monkeypatch):
 
     scout, inspected = asyncio.run(scenario())
     assert inspected == [500]
-    assert scout.seen.maxlen >= 500     # SNIPER_DEDUP_SIZE=20 podniesione do minimum
+    assert scout.seen.maxlen >= 100     # SNIPER_DEDUP_SIZE=20 podniesione do minimum
 
 def test_sold_and_active_status():
     assert inactive_reason(FIX["sidebar_sold"]) == "sold"
@@ -251,7 +251,9 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
 
     # Zwiadowca woła to tak samo jak main_vinted.run_scraper_cycle
     cfg = ScoutConfig(category="karty_pamieci", search_text="", price_from="")
-    assert list(catalog_params(cfg).items()) == list(sm.get_catalog_params(category="karty_pamieci", page=1, order="newest_first").items())
+    legacy = sm.get_catalog_params(category="karty_pamieci", page=1, order="newest_first")
+    legacy["per_page"] = cfg.per_page    # jedyna celowa różnica: mniejsza strona = mniej transferu
+    assert list(catalog_params(cfg).items()) == list(legacy.items())
     # Kategoria spoza słownika (np. laptopy 3580) idzie wprost jako attribute_ids[catalog]
     assert get_catalog_params(category="3580")["attribute_ids[catalog]"] == "3580"
 
@@ -372,3 +374,23 @@ def test_price_to_and_catalog_from_env(monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(config)
+
+
+def test_scout_uses_per_page_from_config():
+    seen = {}
+
+    def handler(request):
+        seen["per_page"] = request.url.params.get("per_page")
+        return httpx.Response(200, json={"items": [{"id": 1, "user": {}}]})
+
+    async def scenario():
+        session = VintedSession()
+        session.client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers=session.client.headers)
+        scout = Scout(ScoutConfig(category="3580", per_page=20, dedup_size=10), session, EmailNotifier(SmtpConfig()))
+        await scout.poll_catalog()
+        await session.close()
+        return scout
+
+    scout = asyncio.run(scenario())
+    assert seen["per_page"] == "20"
+    assert scout.seen.maxlen == 100      # 5 x 20, minimum 100

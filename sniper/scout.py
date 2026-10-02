@@ -34,10 +34,13 @@ def catalog_params(cfg):
         search_text=cfg.search_text,
         price_from=cfg.price_from,
         price_to=cfg.price_to,
+        per_page=cfg.per_page,
     )
 
 
-MIN_DEDUP = 500  # > 5 stron katalogu po 96 ofert
+def min_dedup(per_page):
+    """Pamięć ID = co najmniej 5 stron katalogu (i nie mniej niż 100)."""
+    return max(100, 5 * per_page)
 
 
 def _catalog_price(item):
@@ -59,10 +62,11 @@ class Scout:
         self.cfg = cfg
         self.session = session
         self.notifier = notifier
-        if cfg.dedup_size < MIN_DEDUP:
-            log.warning("[SCOUT] SNIPER_DEDUP_SIZE=%d to za mało przy stronie 96 ofert - używam %d.",
-                        cfg.dedup_size, MIN_DEDUP)
-        self.seen = RecentIds(max(cfg.dedup_size, MIN_DEDUP))
+        floor = min_dedup(cfg.per_page)
+        if cfg.dedup_size < floor:
+            log.warning("[SCOUT] SNIPER_DEDUP_SIZE=%d to za mało przy stronie %d ofert - używam %d.",
+                        cfg.dedup_size, cfg.per_page, floor)
+        self.seen = RecentIds(max(cfg.dedup_size, floor))
         # Kolejka "złapanych" ofert dla przyszłego modułu AI (słowniki z Offer.to_dict()).
         self.offers = asyncio.Queue(maxsize=200)
         self._detail_slots = asyncio.Semaphore(cfg.max_concurrent_details)
@@ -176,9 +180,9 @@ class Scout:
 
     # ------------------------------------------------------------------ pętla
     async def run(self):
-        log.info("=== ZWIADOWCA START | katalog=%s | cena %s-%s PLN | skan co %.0fs | proxy=%s ===",
+        log.info("=== ZWIADOWCA START | katalog=%s | cena %s-%s PLN | %d ofert/skan co %.0fs | proxy=%s ===",
                  self.cfg.catalog_id, self.cfg.price_from or "0", self.cfg.price_to or "∞",
-                 self.cfg.poll_interval, "TAK" if self.cfg.proxy_url else "NIE")
+                 self.cfg.per_page, self.cfg.poll_interval, "TAK" if self.cfg.proxy_url else "NIE")
         backoff = 0.0
         needs_refresh = True
         while True:

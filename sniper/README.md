@@ -19,7 +19,7 @@ ogłoszenia, wyciąga dane gotowe do wysyłki do modelu AI i wysyła alert e-mai
 ## Przepływ jednej oferty
 
 1. `GET https://api.vinted.pl/svc-catalogue/items` – parametry i nagłówki 1:1 z działającego zapytania
-   przeglądarki (cURL z F12): `page`, `per_page=96`, `search_text`, `price_from`, `currency=PLN`, `order=newest_first`,
+   przeglądarki (cURL z F12): `page`, `per_page` (domyślnie 20 – `SNIPER_PER_PAGE`), `search_text`, `price_from`, `currency=PLN`, `order=newest_first`,
    `attribute_ids[catalog]` / `[brand]` / `[brand_collection]` / `[status]`. Nagłówki `config.CATALOG_HEADERS`
    (m.in. `origin`, `sec-fetch-site: same-site`, `platform: web`, `x-next-app: marketplace-web`, Edge 154),
    plus świeże `x-csrf-token` / `x-anon-id`. Nowe ID = spoza `RecentIds`.
@@ -108,7 +108,8 @@ python -m sniper.notifier
   zamiast zmiany IP przy każdym żądaniu.
 * **Rozgrzewka**: pierwszy skan tylko zapamiętuje obecne oferty (bez alertów). Wyłączysz to przez
   `SNIPER_SKIP_INITIAL_BATCH=false`.
-* **Duplikaty**: pamięć ostatnich 500 ID (`deque` + `set`, minimum 500 – katalog zwraca 96 ofert na stronę).
+* **Transfer i duplikaty**: skan pobiera `SNIPER_PER_PAGE` ofert (domyślnie 20 ≈ 9 KB; 96 ≈ 39 KB – pomiar `check_per_page.py`).
+  Pamięć ID (`deque` + `set`) ma co najmniej 5 × `per_page` (min. 100).
   Bez progu „niższe ID = stare”: Vinted nadaje ID przy tworzeniu ogłoszenia, więc szkic opublikowany później ma niższe ID.
 * **Heartbeat** (co `SNIPER_HEARTBEAT` s): skany, błędy, nowe/złapane/pominięte (z powodem), maile wysłane/błędy
   i 5 pierwszych ofert z katalogu (kolejność Vinted) z linkami – do porównania z przeglądarką.

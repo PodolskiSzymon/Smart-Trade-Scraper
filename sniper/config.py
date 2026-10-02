@@ -131,7 +131,7 @@ categories = {
 CATEGORIES = categories
 
 
-def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', brand_collection_ids='', status_ids='', price_from='', price_to=''):
+def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', brand_collection_ids='', status_ids='', price_from='', price_to='', per_page=96):
     """Kopia session_management.get_catalog_params - parametry 1:1 z działającego zapytania (cURL z przeglądarki).
 
     Jedyna różnica: kategoria spoza słownika (np. "3580") jest używana wprost jako attribute_ids[catalog],
@@ -140,7 +140,7 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
     catalog_ids = categories.get(category, category)
     params = {
         'page': page,
-        'per_page': 96,
+        'per_page': per_page,
         'search_text': search_text,
         'price_from': price_from,
         'price_to': price_to,
@@ -193,8 +193,11 @@ class ScoutConfig:
     search_text: str = _env("SNIPER_SEARCH_TEXT")
     price_from: str = _env("SNIPER_PRICE_FROM", "100")   # minimalna cena w PLN (puste = bez filtra)
     price_to: str = _env("SNIPER_PRICE_TO")               # maksymalna cena w PLN (puste = bez filtra)
-    # Pamięć ID - musi być kilka razy większa niż strona katalogu (96); poniżej 500 jest podnoszona.
-    dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 500)
+    # Ofert na jeden skan. svc-catalogue respektuje per_page (test check_per_page.py, 2026-10-02):
+    # 96 ofert = ~39 KB transferu na skan, 20 ofert = ~9 KB. 20 to zapas ~1 h przy nowej ofercie co ~3 min.
+    per_page: int = _env_int("SNIPER_PER_PAGE", 20)
+    # Pamięć ID - musi być kilka razy większa niż strona katalogu; za mała jest podnoszona do 5 x per_page (min. 100).
+    dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 100)
 
     # Odstęp między STARTAMI kolejnych skanów katalogu: 15 s = 4 skany na minutę (oszczędza transfer proxy)
     poll_interval: float = _env_float("SNIPER_POLL_INTERVAL", 15.0)
