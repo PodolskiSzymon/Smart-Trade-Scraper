@@ -53,6 +53,9 @@ async def main():
         proxy_url=cfg.proxy_url,
         timeout=cfg.request_timeout,
         browser_wait_ms=cfg.browser_wait_ms,
+        refresh_attempts=cfg.refresh_attempts,
+        refresh_retry_delay=cfg.refresh_retry_delay,
+        refresh_timeout=cfg.refresh_timeout,
     )
     notifier = EmailNotifier(cfg.smtp)
     scout = Scout(cfg, session, notifier)

@@ -209,6 +209,11 @@ class ScoutConfig:
     skip_initial_batch: bool = _env_bool("SNIPER_SKIP_INITIAL_BATCH", True)
 
     browser_wait_ms: int = _env_int("SNIPER_BROWSER_WAIT_MS", 15000)
+    # Odświeżanie sesji przez Playwright (przy rotacyjnym proxy każda próba = nowe IP):
+    refresh_attempts: int = _env_int("SNIPER_REFRESH_ATTEMPTS", 6)          # prób w jednej serii
+    refresh_retry_delay: float = _env_float("SNIPER_REFRESH_RETRY_DELAY", 5.0)  # s między próbami
+    refresh_timeout: float = _env_float("SNIPER_REFRESH_TIMEOUT", 90.0)    # s limitu na jedną próbę
+    refresh_backoff: float = _env_float("SNIPER_REFRESH_BACKOFF", 30.0)    # s przerwy po nieudanej serii
     # Folder na logi: sniper.log (rotacja co północ, 30 dni) + offers.jsonl (złapane oferty)
     log_dir: str = _env("SNIPER_LOG_DIR") or str(Path(__file__).with_name("logs"))
 

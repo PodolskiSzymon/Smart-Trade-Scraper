@@ -412,10 +412,9 @@ def test_refresh_retries_hung_and_reset_attempts(monkeypatch):
                 {"x-csrf-token": "tok", "x-anon-id": "abc"})
 
     monkeypatch.setattr(sess, "fetch_fresh_tokens", flaky_tokens)
-    monkeypatch.setattr(sess, "REFRESH_RETRY_DELAY", 0)
 
     async def scenario():
-        session = sess.VintedSession(browser_wait_ms=50)  # limit próby = 0.3 s
+        session = sess.VintedSession(refresh_attempts=3, refresh_retry_delay=0, refresh_timeout=0.3)
         await session.refresh()
         token = session.client.headers.get("x-csrf-token")
         await session.close()
@@ -433,10 +432,9 @@ def test_refresh_gives_up_after_attempts(monkeypatch):
         raise ConnectionResetError(10054, "reset")
 
     monkeypatch.setattr(sess, "fetch_fresh_tokens", always_fails)
-    monkeypatch.setattr(sess, "REFRESH_RETRY_DELAY", 0)
 
     async def scenario():
-        session = sess.VintedSession(browser_wait_ms=50)
+        session = sess.VintedSession(refresh_attempts=3, refresh_retry_delay=0, refresh_timeout=0.3)
         try:
             await session.refresh()
         finally:
@@ -459,3 +457,20 @@ def test_connection_reset_is_not_logged_as_error(caplog):
         loop.close()
     assert any(r.levelname == "DEBUG" and "zerwała" in r.getMessage() for r in caplog.records)
     assert any(r.levelname == "ERROR" and "inny błąd" in r.getMessage() for r in caplog.records)
+
+
+def test_refresh_settings_from_env(monkeypatch):
+    monkeypatch.setenv("SNIPER_REFRESH_ATTEMPTS", "10")
+    monkeypatch.setenv("SNIPER_REFRESH_RETRY_DELAY", "2")
+    monkeypatch.setenv("SNIPER_REFRESH_TIMEOUT", "120")
+    monkeypatch.setenv("SNIPER_REFRESH_BACKOFF", "60")
+    import importlib
+    import sniper.config as config
+    importlib.reload(config)
+    try:
+        cfg = config.ScoutConfig()
+        assert (cfg.refresh_attempts, cfg.refresh_retry_delay, cfg.refresh_timeout, cfg.refresh_backoff) == (10, 2.0, 120.0, 60.0)
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)
+    assert config.ScoutConfig().refresh_attempts == 6

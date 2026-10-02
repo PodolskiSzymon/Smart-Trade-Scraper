@@ -102,6 +102,9 @@ python -m sniper.notifier
 * **Filtry**: `SNIPER_CATALOG` (numer kategorii, np. `3580`; nazwa z `config.CATEGORIES` też działa, stare `SNIPER_CATEGORY` jako zapas),
   `SNIPER_PRICE_FROM` / `SNIPER_PRICE_TO` (PLN, puste = bez limitu). Cena jest dodatkowo sprawdzana po pobraniu szczegółów.
 * **Playwright i proxy z hasłem**: przeglądarka łączy się z `127.0.0.1` (przekaźnik), a ten z IPRoyal z Twoim loginem i hasłem.
+* **Odświeżanie sesji**: `SNIPER_REFRESH_ATTEMPTS` prób (domyślnie 6) co `SNIPER_REFRESH_RETRY_DELAY` s (5),
+  każda z limitem `SNIPER_REFRESH_TIMEOUT` s (90) i przez nowe IP; po nieudanej serii przerwa `SNIPER_REFRESH_BACKOFF` s (30)
+  i kolejna seria. Zerwane połączenia od proxy (WinError 10054) lądują tylko w pliku logu.
 * **Proxy i ciastka anty-botowe**: `cf_clearance` / `datadome` są wiązane z IP i User-Agentem.
   Dlatego Playwright też idzie przez proxy, a UA jest identyczny w obu klientach.
   Jeśli po odświeżeniu sesji wciąż lecą 403, rozważ sesję „sticky” w IPRoyal (stały IP przez kilka minut)

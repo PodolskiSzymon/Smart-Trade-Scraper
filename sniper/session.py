@@ -16,8 +16,6 @@ log = logging.getLogger("sniper.session")
 
 TOKEN_HEADERS = ("x-csrf-token", "x-anon-id")
 AUTH_ERRORS = (401, 403)
-REFRESH_ATTEMPTS = 3
-REFRESH_RETRY_DELAY = 5
 
 
 class SessionExpired(Exception):
@@ -139,9 +137,13 @@ class VintedSession:
     odpala się tylko raz.
     """
 
-    def __init__(self, proxy_url=None, timeout=10.0, browser_wait_ms=15000):
+    def __init__(self, proxy_url=None, timeout=10.0, browser_wait_ms=15000,
+                 refresh_attempts=6, refresh_retry_delay=5.0, refresh_timeout=90.0):
         self._proxy_url = proxy_url or None
         self._browser_wait_ms = browser_wait_ms
+        self._refresh_attempts = max(1, int(refresh_attempts))
+        self._refresh_retry_delay = max(0.0, float(refresh_retry_delay))
+        self._refresh_timeout = float(refresh_timeout)
         self._ready = asyncio.Event()
         self._ready.set()
         self._lock = asyncio.Lock()
@@ -177,25 +179,26 @@ class VintedSession:
                 self._ready.set()
 
     async def _fetch_with_retries(self):
-        """Do REFRESH_ATTEMPTS prób, każda z twardym limitem czasu.
+        """Do SNIPER_REFRESH_ATTEMPTS prób, każda z limitem SNIPER_REFRESH_TIMEOUT sekund.
 
         Przy rotacyjnym proxy każde nowe połączenie idzie przez inne IP, więc szybka ponowna próba
         zwykle pomaga, gdy węzeł wyjściowy zerwie połączenie (WinError 10054) albo strona wisi.
         """
-        limit = self._browser_wait_ms / 1000 * 6          # domyślnie 90 s na całą wizytę przeglądarki
+        attempts = self._refresh_attempts
         last_error = None
-        for attempt in range(1, REFRESH_ATTEMPTS + 1):
+        for attempt in range(1, attempts + 1):
             try:
-                return await asyncio.wait_for(fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms), limit)
+                return await asyncio.wait_for(fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms),
+                                              self._refresh_timeout)
             except Exception as exc:
                 last_error = exc
                 reason = (str(exc).splitlines() or [""])[0] or type(exc).__name__
-                if attempt < REFRESH_ATTEMPTS:
-                    log.warning("[AUTH] Próba %d/%d odświeżenia nieudana (%s) - ponawiam za %ds (nowe IP).",
-                                attempt, REFRESH_ATTEMPTS, reason, REFRESH_RETRY_DELAY)
-                    await asyncio.sleep(REFRESH_RETRY_DELAY)
+                if attempt < attempts:
+                    log.warning("[AUTH] Próba %d/%d odświeżenia nieudana (%s) - ponawiam za %.0fs (nowe IP).",
+                                attempt, attempts, reason, self._refresh_retry_delay)
+                    await asyncio.sleep(self._refresh_retry_delay)
         reason = (str(last_error).splitlines() or [""])[0] or type(last_error).__name__
-        raise SessionExpired(f"Odświeżenie sesji nie powiodło się po {REFRESH_ATTEMPTS} próbach: {reason}") from last_error
+        raise SessionExpired(f"Odświeżenie sesji nie powiodło się po {attempts} próbach: {reason}") from last_error
 
     async def get_json(self, url, params=None, referer=None, extra_headers=None):
         """GET z automatycznym odświeżeniem sesji przy 401/403 (jedna ponowna próba)."""

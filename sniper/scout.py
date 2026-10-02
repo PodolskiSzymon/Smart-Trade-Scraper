@@ -197,7 +197,7 @@ class Scout:
                 backoff = min(max(backoff * 2, 10.0), 120.0)
                 log.warning("[SCOUT] 429 Too Many Requests - czekam %.0fs.", backoff)
             except SessionExpired as exc:
-                backoff = 30.0
+                backoff = self.cfg.refresh_backoff
                 log.error("[SCOUT] %s - czekam %.0fs.", exc, backoff)
             except (httpx.TransportError, httpx.HTTPStatusError, ValueError) as exc:
                 # Błąd proxy/sieci/JSON - przy rotacyjnym proxy następne żądanie pójdzie z innego IP.
