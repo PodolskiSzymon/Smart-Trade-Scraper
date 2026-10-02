@@ -39,7 +39,7 @@ def run_vinted_cycle(session, target_category, target_stop_ids):
             
             response = session.get(CATALOG_URL, params=catalog_params)
             
-            if response.status_code == 401:
+            if response.status_code in (401, 403):
                 logging.warning("[VINTED] Ciastko wygasło. Odświeżam...")
                 update_sesions_cookies(session)
                 response = session.get(CATALOG_URL, params=catalog_params)

@@ -138,7 +138,7 @@ def run_verification_cycle(session, target_category):
     catalog_params = get_catalog_params(category=target_category, page=curr_page, order='newest_first')
     
     response = session.get(CATALOG_URL, params=catalog_params)
-    if response.status_code == 401:
+    if response.status_code in (401, 403):
         update_sesions_cookies(session)
         response = session.get(CATALOG_URL, params=catalog_params)
         

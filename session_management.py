@@ -49,6 +49,7 @@ def make_endpoints_referer(item_id, title):
 def update_sesions_cookies(session):
     """Odświeża zarówno ciastka jak i tokeny w aktywnej sesji."""
     new_cookies, new_headers = update_cookies_and_headers()
+    session.cookies.clear()          # stare ciastka (np. wygasły cf_clearance) nie mieszają się z nowymi
     session.cookies.update(new_cookies)
     if new_headers:
         session.headers.update(new_headers)
