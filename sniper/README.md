@@ -88,6 +88,9 @@ python -m sniper.notifier
 * `sniper/logs/sniper.log` – wszystko, co widać w konsoli, plus szczegóły (pełny JSON złapanych ofert,
   tracebacki). Nowy plik co północ, poprzednie jako `sniper.log.RRRR-MM-DD`, trzymane 30 dni.
 * `sniper/logs/offers.jsonl` – każda złapana oferta jako jedna linia JSON (dane dla modułu AI).
+* `sniper/logs/traffic.csv` – co heartbeat: transfer przez proxy w podziale na katalog / detale ofert /
+  przeglądarkę (bajty wysłane + odebrane, liczba zapytań) oraz prognoza MB/h. Kolumny `per_page` i
+  `poll_interval` pozwalają porównać ustawienia (np. 20 ofert co 15 s vs 4 oferty co 5 s).
 * Folder zmienisz przez `SNIPER_LOG_DIR`. `sniper/logs/` jest w `.gitignore`.
 
 ## Uwagi

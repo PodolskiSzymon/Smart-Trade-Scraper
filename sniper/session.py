@@ -11,6 +11,7 @@ import httpx
 
 from .config import BASE_HEADERS, BASE_URL, BROWSER_USER_AGENT
 from .proxy_relay import ProxyRelay
+from .traffic import TrafficMeter
 
 log = logging.getLogger("sniper.session")
 
@@ -92,17 +93,18 @@ async def _browse_vinted(playwright_proxy_cfg, wait_ms):
     return cookies, captured
 
 
-async def _browse_via_proxy(proxy_url, wait_ms):
+async def _browse_via_proxy(proxy_url, wait_ms, meter=None):
     cfg = playwright_proxy(proxy_url)
     if "username" not in cfg and "password" not in cfg:
         return await _browse_vinted(cfg, wait_ms)
     # Chromium nie wysyła loginu/hasła do proxy przy HTTPS (ERR_PROXY_AUTH_UNSUPPORTED),
     # więc idziemy przez lokalny przekaźnik, który sam dokleja Proxy-Authorization.
-    async with ProxyRelay(proxy_url) as relay:
+    on_bytes = (lambda sent, received: meter.add("browser", sent, received, requests=0)) if meter else None
+    async with ProxyRelay(proxy_url, on_bytes=on_bytes) as relay:
         return await _browse_vinted({"server": relay.server}, wait_ms)
 
 
-async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
+async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000, meter=None):
     """Odpala headless Chromium, wchodzi na Vinted i przechwytuje ciastka + nagłówki.
 
     Zwraca (lista_ciastek_playwrighta, {"x-csrf-token": ..., "x-anon-id": ...}).
@@ -111,7 +113,9 @@ async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000):
     log.info("[AUTH] Playwright (headless) wchodzi na Vinted po świeże tokeny (proxy: %s)...",
              "TAK" if proxy_url else "NIE")
     if proxy_url:
-        cookies, captured = await _browse_via_proxy(proxy_url, wait_ms)
+        cookies, captured = await _browse_via_proxy(proxy_url, wait_ms, meter)
+        if meter:
+            meter.add("browser", requests=1)
     else:
         cookies, captured = await _browse_vinted(None, wait_ms)
 
@@ -148,6 +152,7 @@ class VintedSession:
         self._ready.set()
         self._lock = asyncio.Lock()
         self._generation = 0
+        self.traffic = TrafficMeter()
         self.client = httpx.AsyncClient(
             proxy=self._proxy_url,
             headers=BASE_HEADERS,
@@ -188,7 +193,8 @@ class VintedSession:
         last_error = None
         for attempt in range(1, attempts + 1):
             try:
-                return await asyncio.wait_for(fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms),
+                return await asyncio.wait_for(fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms,
+                                                                 meter=self.traffic),
                                               self._refresh_timeout)
             except Exception as exc:
                 last_error = exc
@@ -209,6 +215,7 @@ class VintedSession:
             await self._ready.wait()
             generation = self._generation
             response = await self.client.get(url, params=params, headers=headers or None)
+            self.traffic.add_http("catalog" if response.url.host == "api.vinted.pl" else "details", response)
 
             if response.status_code in AUTH_ERRORS:
                 if attempt == 0:

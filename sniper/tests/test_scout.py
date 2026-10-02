@@ -99,7 +99,7 @@ def test_scout_end_to_end(monkeypatch):
     """Katalog -> 401 -> odświeżenie -> detale; sprzedana pominięta, aktywna złapana."""
     calls = {"refresh": 0, "catalog": 0}
 
-    async def fake_tokens(proxy_url=None, wait_ms=0):
+    async def fake_tokens(proxy_url=None, wait_ms=0, **kw):
         calls["refresh"] += 1
         return ([{"name": "anon_id", "value": "abc", "domain": ".vinted.pl", "path": "/"}],
                 {"x-csrf-token": "tok", "x-anon-id": "abc"})
@@ -402,7 +402,7 @@ def test_refresh_retries_hung_and_reset_attempts(monkeypatch):
 
     attempts = {"n": 0}
 
-    async def flaky_tokens(proxy_url=None, wait_ms=0):
+    async def flaky_tokens(proxy_url=None, wait_ms=0, **kw):
         attempts["n"] += 1
         if attempts["n"] == 1:
             await asyncio.sleep(10)                      # strona wisi -> limit czasu
@@ -428,7 +428,7 @@ def test_refresh_gives_up_after_attempts(monkeypatch):
     import pytest
     import sniper.session as sess
 
-    async def always_fails(proxy_url=None, wait_ms=0):
+    async def always_fails(proxy_url=None, wait_ms=0, **kw):
         raise ConnectionResetError(10054, "reset")
 
     monkeypatch.setattr(sess, "fetch_fresh_tokens", always_fails)
@@ -474,3 +474,70 @@ def test_refresh_settings_from_env(monkeypatch):
         monkeypatch.undo()
         importlib.reload(config)
     assert config.ScoutConfig().refresh_attempts == 6
+
+
+def test_traffic_meter_counts_compressed_body_and_cookie_headers():
+    import gzip
+    from sniper.traffic import TrafficMeter
+
+    payload = json.dumps({"items": [{"id": i, "title": "Laptop " * 20} for i in range(20)]}).encode()
+    packed = gzip.compress(payload)
+
+    def handler(request):
+        return httpx.Response(200, stream=httpx.ByteStream(packed),      # jak z sieci: strumień spakowany
+                              headers={"content-encoding": "gzip", "content-type": "application/json"})
+
+    async def scenario():
+        session = VintedSession()
+        session.client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers=session.client.headers)
+        session.client.cookies.set("datadome", "x" * 3000, domain=".vinted.pl")
+        await session.get_json("https://api.vinted.pl/svc-catalogue/items", params={"per_page": 20})
+        await session.get_json("https://www.vinted.pl/api/v2/items/1/shipping_details")
+        await session.close()
+        return session.traffic
+
+    meter = asyncio.run(scenario())
+    cat = meter.total["catalog"]
+    assert cat["requests"] == 1
+    assert len(packed) <= cat["received"] < len(packed) + 1000      # ciało spakowane + nagłówki, nie 400 KB JSON
+    assert cat["sent"] > 3000                                       # ciastka w nagłówku żądania
+    assert meter.total["details"]["requests"] == 1
+    text, row = meter.window_report()
+    assert "catalog" in text and row["catalog_requests"] == 1 and row["total_bytes"] > 0
+    assert meter.window_report()[1]["window_bytes"] == 0           # okno wyzerowane
+
+
+def test_relay_counts_browser_bytes():
+    from sniper.proxy_relay import ProxyRelay
+
+    counted = {"sent": 0, "received": 0}
+
+    def on_bytes(sent, received):
+        counted["sent"] += sent
+        counted["received"] += received
+
+    async def upstream(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 200 Connection established\r\n\r\n" + b"y" * 5000)
+        await writer.drain()
+        await reader.read(100)
+        writer.close()
+
+    async def scenario():
+        server = await asyncio.start_server(upstream, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        async with ProxyRelay(f"http://U:P@127.0.0.1:{port}", on_bytes=on_bytes) as relay:
+            host, rport = relay.server.rsplit("/", 1)[1].split(":")
+            reader, writer = await asyncio.open_connection(host, int(rport))
+            writer.write(b"CONNECT www.vinted.pl:443 HTTP/1.1\r\n\r\n")
+            await writer.drain()
+            await reader.readexactly(len(b"HTTP/1.1 200 Connection established\r\n\r\n") + 5000)
+            writer.write(b"z" * 100)
+            await writer.drain()
+            await asyncio.sleep(0.05)
+            writer.close()
+        server.close()
+
+    asyncio.run(scenario())
+    assert counted["received"] >= 5000
+    assert counted["sent"] >= 100 + len(b"CONNECT www.vinted.pl:443 HTTP/1.1\r\n\r\n")

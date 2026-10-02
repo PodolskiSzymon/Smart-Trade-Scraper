@@ -166,6 +166,23 @@ class Scout:
         self.offers.put_nowait(payload)
         self.notifier.notify(offer)
 
+    def _save_traffic(self, row):
+        """Wiersz do <log_dir>/traffic.csv - do porównania ustawień per_page / tempa skanów."""
+        if not self.cfg.log_dir:
+            return
+        row = {"time": time.strftime("%Y-%m-%d %H:%M:%S"), "per_page": self.cfg.per_page,
+               "poll_interval": self.cfg.poll_interval, **row}
+        try:
+            path = Path(self.cfg.log_dir) / "traffic.csv"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            new = not path.exists()
+            with path.open("a", encoding="utf-8") as f:
+                if new:
+                    f.write(";".join(row) + "\n")
+                f.write(";".join(str(v) for v in row.values()) + "\n")
+        except OSError as exc:
+            log.warning("[SCOUT] Nie zapisałem traffic.csv: %s", exc)
+
     def _save_offer(self, payload):
         """Dopisuje ofertę jako jedną linię JSON do <log_dir>/offers.jsonl (mikrosekundy, nie blokuje pętli)."""
         if not self.cfg.log_dir:
@@ -234,6 +251,9 @@ class Scout:
             for it in self._top_items:
                 log.info("    %s | %s | %s | %s", it.get("id"), it.get("title", "?"), _catalog_price(it),
                          item_url(it.get("id"), it))
+        text, row = self.session.traffic.window_report()
+        log.info("[SCOUT] %s", text)
+        self._save_traffic(row)
         for key in ("polls", "errors", "new", "caught"):
             s[key] = 0
         self._skipped = {}

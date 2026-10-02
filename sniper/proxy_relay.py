@@ -15,9 +15,11 @@ log = logging.getLogger("sniper.proxy_relay")
 _HEADER_LIMIT = 64 * 1024
 
 
-async def _pipe(reader, writer):
+async def _pipe(reader, writer, count=None):
     try:
         while data := await reader.read(65536):
+            if count:
+                count(len(data))
             writer.write(data)
             await writer.drain()
     except (ConnectionError, asyncio.CancelledError):
@@ -32,7 +34,9 @@ async def _pipe(reader, writer):
 class ProxyRelay:
     """Użycie: `async with ProxyRelay(url) as relay: ... relay.server ...`"""
 
-    def __init__(self, upstream_url):
+    def __init__(self, upstream_url, on_bytes=None):
+        """on_bytes(sent, received) - opcjonalny licznik bajtów przechodzących przez przekaźnik."""
+        self._on_bytes = on_bytes
         parts = urlsplit(upstream_url)
         self._host = parts.hostname
         self._port = parts.port or 80
@@ -57,6 +61,14 @@ class ProxyRelay:
         await asyncio.gather(*self._connections, return_exceptions=True)
         await self._server.wait_closed()
 
+    def _count_sent(self, n):
+        if self._on_bytes:
+            self._on_bytes(n, 0)
+
+    def _count_received(self, n):
+        if self._on_bytes:
+            self._on_bytes(0, n)
+
     async def _handle(self, client_reader, client_writer):
         task = asyncio.current_task()
         self._connections.add(task)
@@ -71,12 +83,13 @@ class ProxyRelay:
             new_head = lines[0] + b"\r\n" + b"".join(l + b"\r\n" for l in kept) + self._auth + b"\r\n"
 
             upstream_reader, upstream_writer = await asyncio.open_connection(self._host, self._port)
+            self._count_sent(len(new_head))
             upstream_writer.write(new_head)
             await upstream_writer.drain()
 
             await asyncio.gather(
-                _pipe(client_reader, upstream_writer),
-                _pipe(upstream_reader, client_writer),
+                _pipe(client_reader, upstream_writer, self._count_sent),
+                _pipe(upstream_reader, client_writer, self._count_received),
             )
         except (asyncio.IncompleteReadError, asyncio.LimitOverrunError, ConnectionError, OSError) as exc:
             log.debug("[RELAY] Połączenie przerwane: %r", exc)
