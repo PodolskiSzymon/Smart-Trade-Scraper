@@ -4,6 +4,8 @@ import json
 import logging
 
 COOKIES_FILE = "vinted_cookies.json"
+# Ten sam UA co w session_management.make_boot_session() - cf_clearance/datadome są wiązane z UA
+BROWSER_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 Edg/154.0.0.0"
 HEADERS_FILE = "vinted_headers.json"
 
 def load_vinted_data_from_file():
@@ -43,16 +45,15 @@ def load_olx_cookies(file_path="olx_cookies.json"):
 def zdobadz_nowe_ciastka_i_headery():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False) 
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
-        )
+        context = browser.new_context(user_agent=BROWSER_USER_AGENT)
         page = context.new_page()
         
         przechwycone_headery = {}
         
-        # Przechwytujemy ruch sieciowy przeglądarki
+        # Przechwytujemy ruch sieciowy przeglądarki - stare API (www.vinted.pl/api/v2)
+        # i nowe (api.vinted.pl/svc-catalogue/...)
         def intercept_request(request):
-            if "api/v2" in request.url:
+            if "api/v2" in request.url or "api.vinted.pl" in request.url:
                 przechwycone_headery.update(request.headers)
 
         page.on("request", intercept_request)
@@ -71,9 +72,17 @@ def zdobadz_nowe_ciastka_i_headery():
             wazne_headery['x-csrf-token'] = przechwycone_headery['x-csrf-token']
         if 'x-anon-id' in przechwycone_headery:
             wazne_headery['x-anon-id'] = przechwycone_headery['x-anon-id']
-            
+
+        # Zapas, gdy żadne zapytanie API nie niosło tokenów: csrf z <meta>, anon-id z ciastka anon_id
+        if 'x-csrf-token' not in wazne_headery:
+            token = page.evaluate("() => document.querySelector('meta[name=\"csrf-token\"]')?.content || null")
+            if token:
+                wazne_headery['x-csrf-token'] = token
+        if 'x-anon-id' not in wazne_headery and gotowe_ciastka.get('anon_id'):
+            wazne_headery['x-anon-id'] = gotowe_ciastka['anon_id']
+
         browser.close()
-        logging.info("[AUTH] Sukces! Zdobyto świeże ciasteczka i tokeny zabezpieczające.")
+        logging.info(f"[AUTH] Sukces! Zdobyto {len(gotowe_ciastka)} ciastek i nagłówki: {', '.join(sorted(wazne_headery)) or 'brak'}.")
         return gotowe_ciastka, wazne_headery
 
 def update_cookies_and_headers():
