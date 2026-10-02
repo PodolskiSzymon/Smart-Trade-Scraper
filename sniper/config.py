@@ -187,7 +187,7 @@ class ScoutConfig:
 
     category: str = _env("SNIPER_CATEGORY", "karty_pamieci")
     search_text: str = _env("SNIPER_SEARCH_TEXT")
-    price_from: str = _env("SNIPER_PRICE_FROM")
+    price_from: str = _env("SNIPER_PRICE_FROM", "100")   # minimalna cena w PLN (puste = bez filtra)
     dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 20)
 
     # Odstęp między STARTAMI kolejnych skanów katalogu: 15 s = 4 skany na minutę (oszczędza transfer proxy)
