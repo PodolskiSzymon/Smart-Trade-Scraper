@@ -82,7 +82,8 @@ def requests_proxies(proxy_url=None):
 
 
 BASE_URL = "https://www.vinted.pl"
-CATALOG_URL = f"{BASE_URL}/api/v2/catalog/items"
+# Nowy endpoint katalogu (Vinted przeniósł listę z www.vinted.pl/api/v2/catalog/items)
+CATALOG_URL = "https://api.vinted.pl/svc-catalogue/items"
 SIDEBAR_URL = BASE_URL + "/api/v2/items/{item_id}/details/sidebar"
 SHIPPING_URL = BASE_URL + "/api/v2/items/{item_id}/shipping_details"
 
@@ -110,6 +111,8 @@ BASE_HEADERS = {
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-origin',
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
+    'platform': 'web',
+    'x-next-app': 'marketplace-web',
     'Referer': "https://www.vinted.pl/",
 }
 
@@ -124,7 +127,7 @@ CATEGORIES = categories
 def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', status_ids='', color_ids='', price_from='', price_to=''):
     """Kopia session_management.get_catalog_params - parametr po parametrze, w tej samej kolejności.
 
-    Jedyna różnica: kategoria spoza słownika (np. "3580") jest używana wprost jako catalog_ids,
+    Jedyna różnica: kategoria spoza słownika (np. "3580") jest używana wprost jako attribute_ids[catalog],
     zamiast rzucać KeyError.
     """
     catalog_ids = categories.get(category, category)
@@ -136,10 +139,10 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
         'price_to': price_to,
         'currency': 'PLN',
         'order': order,
-        'catalog_ids': catalog_ids,
-        'brand_ids': brand_ids,
-        'status_ids': status_ids,
-        'color_ids': color_ids,
+        'attribute_ids[catalog]': catalog_ids,
+        'attribute_ids[brand]': brand_ids,
+        'attribute_ids[status]': status_ids,
+        'attribute_ids[color]': color_ids,
         'time': str(int(time.time())),
         'global_search_session_id': str(uuid.uuid4())
     }

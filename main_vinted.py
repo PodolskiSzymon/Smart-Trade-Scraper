@@ -1,4 +1,4 @@
-from session_management import make_boot_session, make_main_loop_referer, make_endpoints_referer, get_catalog_params, update_sesions_cookies 
+from session_management import CATALOG_URL, make_boot_session, make_main_loop_referer, make_endpoints_referer, get_catalog_params, update_sesions_cookies 
 from db_management import pobierz_ostatnie_20_id_vinted, zapisz_nowe_id_vinted
 import time
 import os
@@ -29,12 +29,12 @@ def run_scraper_cycle(session, target_category, target_stop_ids):
         session.headers.update({"Referer": make_main_loop_referer(curr_page)})
         catalog_params = get_catalog_params(category=target_category, page=curr_page, order=my_order)
         
-        response = session.get('https://www.vinted.pl/api/v2/catalog/items', params=catalog_params)
+        response = session.get(CATALOG_URL, params=catalog_params)
         
         if response.status_code == 401:
             logging.warning("[!] Ciastko wygasło. Odświeżam...")
             update_sesions_cookies(session)
-            response = session.get('https://www.vinted.pl/api/v2/catalog/items', params=catalog_params)
+            response = session.get(CATALOG_URL, params=catalog_params)
         
         page_data = response.json()
         if 'pagination' in page_data:

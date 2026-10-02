@@ -18,10 +18,11 @@ ogłoszenia, wyciąga dane gotowe do wysyłki do modelu AI i wysyła alert e-mai
 
 ## Przepływ jednej oferty
 
-1. `GET /api/v2/catalog/items` z parametrami z `config.get_catalog_params()` – kopia 1:1
-   `session_management.get_catalog_params` (m.in. `per_page=96`, `order=newest_first`, puste `brand_ids`/`status_ids`/`color_ids`,
-   `time`, `global_search_session_id`), nagłówki z `make_boot_session()` i Referer z `make_main_loop_referer(1)`.
-   Nowe ID = spoza `RecentIds`.
+1. `GET https://api.vinted.pl/svc-catalogue/items` (nowy endpoint katalogu) z parametrami z `config.get_catalog_params()`
+   – układ jak w `session_management.get_catalog_params` (`per_page=96`, `order=newest_first`, `time`,
+   `global_search_session_id`), z filtrami jako `attribute_ids[catalog]` / `[brand]` / `[status]` / `[color]`.
+   Nagłówki z `make_boot_session()` (w tym `platform: web` i `x-next-app: marketplace-web`), Referer z
+   `make_main_loop_referer(1)`. Nowe ID = spoza `RecentIds`.
 2. Równolegle: `GET /api/v2/items/{id}/details/sidebar` + `GET /api/v2/items/{id}/shipping_details`
 3. Plugin `item_status`: `item_closing_action == "sold"` → oferta ignorowana. Przechodzą tylko
    oferty aktywne (`item_closing_action: null`, a także nie zamknięte, nie zarezerwowane, nie ukryte).

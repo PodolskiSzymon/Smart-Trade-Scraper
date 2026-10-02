@@ -54,7 +54,8 @@ class Scout:
         )
         items = data.get("items") or []
         if not items:
-            log.warning("[SCOUT] Pusty katalog - możliwy soft-ban. Odświeżam sesję.")
+            log.warning("[SCOUT] Pusty katalog (klucze odpowiedzi: %s) - możliwy soft-ban. Odświeżam sesję.",
+                        ", ".join(data) if isinstance(data, dict) else type(data).__name__)
             await self.session.refresh()
             return
 

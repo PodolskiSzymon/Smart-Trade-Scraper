@@ -5,6 +5,9 @@ import time
 import uuid
 import re
 
+# Nowy endpoint katalogu (Vinted przeniósł listę ogłoszeń z www.vinted.pl/api/v2/catalog/items)
+CATALOG_URL = 'https://api.vinted.pl/svc-catalogue/items'
+
 categories={
     'karty_pamieci':3063,
     'elektronika':2994,
@@ -20,10 +23,10 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
         'price_to': price_to,
         'currency': 'PLN',
         'order': order,
-        'catalog_ids': catalog_ids,
-        'brand_ids': brand_ids,
-        'status_ids': status_ids,
-        'color_ids': color_ids,
+        'attribute_ids[catalog]': catalog_ids,
+        'attribute_ids[brand]': brand_ids,
+        'attribute_ids[status]': status_ids,
+        'attribute_ids[color]': color_ids,
         'time': str(int(time.time())),
         'global_search_session_id': str(uuid.uuid4())
     }
@@ -71,6 +74,8 @@ def make_boot_session():
         'sec-fetch-mode': 'cors',
         'sec-fetch-site': 'same-origin',
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36 Edg/149.0.0.0',
+        'platform': 'web',
+        'x-next-app': 'marketplace-web',
     }
 
     session = requests.Session()

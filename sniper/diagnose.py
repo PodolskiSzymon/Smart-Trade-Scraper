@@ -40,7 +40,7 @@ async def browser_phase(proxy_url, params, headed):
             api_calls.append((response.request.method, response.status, response.url.split("?")[0]))
 
     def on_request(request):
-        if "/api/v2/" in request.url:
+        if "/api/v2/" in request.url or "api.vinted.pl" in request.url:
             for name in ("x-csrf-token", "x-anon-id"):
                 if request.headers.get(name):
                     tokens[name] = request.headers[name]
@@ -53,7 +53,7 @@ async def browser_phase(proxy_url, params, headed):
             page.on("request", on_request)
             page.on("response", on_response)
 
-            catalog_page = f"https://www.vinted.pl/catalog?catalog[]={params['catalog_ids']}&order=newest_first"
+            catalog_page = f"https://www.vinted.pl/catalog?catalog[]={params['attribute_ids[catalog]']}&order=newest_first"
             print(f"\n[1] Przeglądarka otwiera: {catalog_page}")
             try:
                 await page.goto(catalog_page, timeout=60000)

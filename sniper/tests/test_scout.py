@@ -71,7 +71,7 @@ def test_scout_end_to_end(monkeypatch):
         if request.headers.get("x-csrf-token") != "tok" or "anon_id=abc" not in request.headers.get("cookie", ""):
             return httpx.Response(401)
         path = request.url.path
-        if path == "/api/v2/catalog/items":
+        if request.url.host == "api.vinted.pl" and path == "/svc-catalogue/items":
             calls["catalog"] += 1
             items = [{"id": 1, "user": {}}] if calls["catalog"] == 1 else [
                 {"id": 1, "user": {}},
@@ -208,14 +208,16 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
     ):
         ours, theirs = get_catalog_params(**kwargs), sm.get_catalog_params(**kwargs)
         assert list(ours.items()) == list(theirs.items())
+    from sniper.config import CATALOG_URL
+    assert CATALOG_URL == sm.CATALOG_URL == "https://api.vinted.pl/svc-catalogue/items"
     assert make_main_loop_referer(1) == sm.make_main_loop_referer(1)
     assert make_main_loop_referer(2) == sm.make_main_loop_referer(2)
 
     # Zwiadowca woła to tak samo jak main_vinted.run_scraper_cycle
     cfg = ScoutConfig(category="karty_pamieci", search_text="", price_from="", price_to="")
     assert list(catalog_params(cfg).items()) == list(sm.get_catalog_params(category="karty_pamieci", page=1, order="newest_first").items())
-    # Kategoria spoza słownika (np. laptopy 3580) idzie wprost jako catalog_ids
-    assert get_catalog_params(category="3580")["catalog_ids"] == "3580"
+    # Kategoria spoza słownika (np. laptopy 3580) idzie wprost jako attribute_ids[catalog]
+    assert get_catalog_params(category="3580")["attribute_ids[catalog]"] == "3580"
 
     # Nagłówki = make_boot_session() (bez dynamicznych tokenów i ciastek z dysku)
     monkeypatch.setattr(sm, "load_vinted_data_from_file", lambda: ({}, {}))
@@ -228,8 +230,8 @@ def test_catalog_request_identical_to_session_management(monkeypatch):
     # Request httpx z tymi parametrami ma ten sam query string co requests
     import requests
     params = sm.get_catalog_params(category="karty_pamieci")
-    ours_url = httpx.Request("GET", "https://www.vinted.pl/api/v2/catalog/items", params=params).url
-    theirs_url = requests.Request("GET", "https://www.vinted.pl/api/v2/catalog/items", params=params).prepare().url
+    ours_url = httpx.Request("GET", sm.CATALOG_URL, params=params).url
+    theirs_url = requests.Request("GET", sm.CATALOG_URL, params=params).prepare().url
     assert str(ours_url) == theirs_url
 
     assert "Edg/" not in BROWSER_USER_AGENT  # UA Playwrighta z cookies_management.py

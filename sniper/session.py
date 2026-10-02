@@ -47,7 +47,7 @@ async def _browse_vinted(playwright_proxy_cfg, wait_ms):
     api_seen = asyncio.Event()
 
     def on_request(request):
-        if "/api/v2/" not in request.url:
+        if "/api/v2/" not in request.url and "api.vinted.pl" not in request.url:
             return
         headers = request.headers
         for name in TOKEN_HEADERS:
