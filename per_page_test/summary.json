@@ -1,0 +1,140 @@
+[
+  {
+    "per_page": 96,
+    "status": 200,
+    "wire_bytes": 40262,
+    "json_bytes": 411092,
+    "encoding": "gzip",
+    "url": "https://api.vinted.pl/svc-catalogue/items?page=1&per_page=96&search_text=&price_from=100&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D=&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=",
+    "items": 96,
+    "first_id": 10211571455,
+    "last_id": 10208361825,
+    "top_keys": [
+      "items",
+      "pagination",
+      "search_tracking_params"
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 96,
+      "time": 1790927769,
+      "total_entries": 960,
+      "total_pages": 10
+    }
+  },
+  {
+    "per_page": 48,
+    "status": 200,
+    "wire_bytes": 20503,
+    "json_bytes": 205815,
+    "encoding": "gzip",
+    "url": "https://api.vinted.pl/svc-catalogue/items?page=1&per_page=48&search_text=&price_from=100&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D=&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=",
+    "items": 48,
+    "first_id": 10211571455,
+    "last_id": 10209858049,
+    "top_keys": [
+      "items",
+      "pagination",
+      "search_tracking_params"
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 48,
+      "time": 1790927771,
+      "total_entries": 960,
+      "total_pages": 20
+    }
+  },
+  {
+    "per_page": 20,
+    "status": 200,
+    "wire_bytes": 9073,
+    "json_bytes": 85812,
+    "encoding": "gzip",
+    "url": "https://api.vinted.pl/svc-catalogue/items?page=1&per_page=20&search_text=&price_from=100&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D=&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=",
+    "items": 20,
+    "first_id": 10211571455,
+    "last_id": 10211110112,
+    "top_keys": [
+      "items",
+      "pagination",
+      "search_tracking_params"
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 20,
+      "time": 1790927772,
+      "total_entries": 960,
+      "total_pages": 48
+    }
+  },
+  {
+    "per_page": 10,
+    "status": 200,
+    "wire_bytes": 4900,
+    "json_bytes": 42880,
+    "encoding": "gzip",
+    "url": "https://api.vinted.pl/svc-catalogue/items?page=1&per_page=10&search_text=&price_from=100&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D=&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=",
+    "items": 10,
+    "first_id": 10211571455,
+    "last_id": 10211359036,
+    "top_keys": [
+      "items",
+      "pagination",
+      "search_tracking_params"
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 10,
+      "time": 1790927774,
+      "total_entries": 960,
+      "total_pages": 96
+    }
+  },
+  {
+    "per_page": 5,
+    "status": 200,
+    "wire_bytes": 2896,
+    "json_bytes": 21737,
+    "encoding": "gzip",
+    "url": "https://api.vinted.pl/svc-catalogue/items?page=1&per_page=5&search_text=&price_from=100&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D=&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=",
+    "items": 5,
+    "first_id": 10211571455,
+    "last_id": 10211503250,
+    "top_keys": [
+      "items",
+      "pagination",
+      "search_tracking_params"
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 5,
+      "time": 1790927776,
+      "total_entries": 960,
+      "total_pages": 192
+    }
+  },
+  {
+    "per_page": "brak",
+    "status": 200,
+    "wire_bytes": 40294,
+    "json_bytes": 411135,
+    "encoding": "gzip",
+    "url": "https://api.vinted.pl/svc-catalogue/items?page=1&search_text=&price_from=100&currency=PLN&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D=&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=",
+    "items": 96,
+    "first_id": 10211571455,
+    "last_id": 10208361825,
+    "top_keys": [
+      "items",
+      "pagination",
+      "search_tracking_params"
+    ],
+    "pagination": {
+      "current_page": 1,
+      "per_page": 96,
+      "time": 1790927777,
+      "total_entries": 960,
+      "total_pages": 10
+    }
+  }
+]
