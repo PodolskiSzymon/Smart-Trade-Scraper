@@ -69,6 +69,20 @@ pip install pytest
 python -m pytest sniper/tests
 ```
 
+## Alerty e-mail
+
+Każda złapana oferta (na razie bez filtrowania) idzie mailem przez Onet (`smtp.poczta.onet.pl:465`, SSL).
+Mail ma wersję tekstową i HTML: tytuł, cena, wysyłka, suma, stan, marka, przycisk do ogłoszenia,
+miniatury + linki do zdjęć (`full_size_url`), pełny opis i sprzedawca (nazwa, kraj, ocena, liczba opinii,
+typ konta, link do profilu).
+
+W `sniper/.env` ustaw `SNIPER_SMTP_USER` (pełny adres @onet.pl) i `SNIPER_SMTP_PASSWORD`;
+`SNIPER_EMAIL_TO` opcjonalnie (domyślnie ten sam adres). Test bez czekania na ogłoszenie:
+
+```bash
+python -m sniper.notifier
+```
+
 ## Logi
 
 * `sniper/logs/sniper.log` – wszystko, co widać w konsoli, plus szczegóły (pełny JSON złapanych ofert,

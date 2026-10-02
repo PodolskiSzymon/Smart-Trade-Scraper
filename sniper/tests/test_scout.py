@@ -48,7 +48,14 @@ def test_build_offer_from_sidebar():
     assert d["url"].endswith("9238023547-samsung")
     msg = build_message(offer, "a@onet.pl", "b@onet.pl")
     assert "Samsung pro ultimate 512GB" in msg["Subject"] and "13.27 PLN" in msg["Subject"]
-    assert offer.url in msg.get_content()
+    text = msg.get_body(("plain",)).get_content()
+    html = msg.get_body(("html",)).get_content()
+    for body in (text, html):
+        assert offer.url in body
+        assert "Naujas, nenaudotas." in body                       # opis
+        assert all(u.split("?")[0] in body for u in offer.photo_urls)  # linki do zdjęć
+        assert "skestenyte.ska" in body and "https://www.vinted.pl/member/148344250" in body
+    assert html.count("<img ") == 3
 
 
 def test_playwright_proxy_parsing():

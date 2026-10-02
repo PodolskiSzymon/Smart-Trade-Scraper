@@ -145,6 +145,7 @@ class Scout:
         backoff = 0.0
         needs_refresh = True
         while True:
+            started = time.monotonic()
             try:
                 if needs_refresh:
                     await self.session.refresh()
@@ -169,7 +170,12 @@ class Scout:
                 self._stats["errors"] += 1
 
             self._heartbeat()
-            await asyncio.sleep(backoff or self.cfg.poll_interval + random.uniform(0, self.cfg.poll_jitter))
+            if backoff:
+                await asyncio.sleep(backoff)
+            else:
+                # Stałe tempo liczone od startu skanu: czas zapytania nie wydłuża odstępu.
+                target = self.cfg.poll_interval + random.uniform(-self.cfg.poll_jitter, self.cfg.poll_jitter)
+                await asyncio.sleep(max(0.0, target - (time.monotonic() - started)))
 
     def _heartbeat(self):
         """Co heartbeat_interval sekund jedna linia "żyję" - żeby cisza w logu nie wyglądała na zawieszenie."""
