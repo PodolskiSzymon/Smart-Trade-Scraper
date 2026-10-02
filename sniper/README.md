@@ -99,7 +99,8 @@ python -m sniper.notifier
   Bez skonfigurowanego proxy Zwiadowca rzuca `ProxyNotConfigured` zamiast wyjść bezpośrednio
   (`SNIPER_REQUIRE_PROXY=true`, domyślnie). Pozostałe skrypty w repozytorium (`main*.py`, OLX,
   `low_important/` itd.) nie korzystają z proxy i działają z domowego IP.
-* **Kategoria**: `SNIPER_CATEGORY` przyjmuje nazwę z `config.CATEGORIES` albo bezpośrednio numer `catalog_id` z Vinted (np. `3580`).
+* **Filtry**: `SNIPER_CATALOG` (numer kategorii, np. `3580`; nazwa z `config.CATEGORIES` też działa, stare `SNIPER_CATEGORY` jako zapas),
+  `SNIPER_PRICE_FROM` / `SNIPER_PRICE_TO` (PLN, puste = bez limitu). Cena jest dodatkowo sprawdzana po pobraniu szczegółów.
 * **Playwright i proxy z hasłem**: przeglądarka łączy się z `127.0.0.1` (przekaźnik), a ten z IPRoyal z Twoim loginem i hasłem.
 * **Proxy i ciastka anty-botowe**: `cf_clearance` / `datadome` są wiązane z IP i User-Agentem.
   Dlatego Playwright też idzie przez proxy, a UA jest identyczny w obu klientach.
@@ -107,7 +108,9 @@ python -m sniper.notifier
   zamiast zmiany IP przy każdym żądaniu.
 * **Rozgrzewka**: pierwszy skan tylko zapamiętuje obecne oferty (bez alertów). Wyłączysz to przez
   `SNIPER_SKIP_INITIAL_BATCH=false`.
-* **Duplikaty**: katalog zwraca 96 ofert, a `RecentIds` trzyma 20 najnowszych ID. Pamięta też próg
-  (najwyższe wypchnięte ID), więc pozostałe, starsze oferty ze strony nie wracają jako „nowe”.
+* **Duplikaty**: pamięć ostatnich 500 ID (`deque` + `set`, minimum 500 – katalog zwraca 96 ofert na stronę).
+  Bez progu „niższe ID = stare”: Vinted nadaje ID przy tworzeniu ogłoszenia, więc szkic opublikowany później ma niższe ID.
+* **Heartbeat** (co `SNIPER_HEARTBEAT` s): skany, błędy, nowe/złapane/pominięte (z powodem), maile wysłane/błędy
+  i 5 pierwszych ofert z katalogu (kolejność Vinted) z linkami – do porównania z przeglądarką.
 * **Onet SMTP**: w ustawieniach skrzynki Onet musi być włączony dostęp przez programy pocztowe (SMTP).
   Hasło podawaj tylko przez `sniper/.env` (plik jest w `.gitignore`).

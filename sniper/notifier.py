@@ -120,6 +120,8 @@ class EmailNotifier:
     def __init__(self, smtp_config):
         self.cfg = smtp_config
         self._tasks = set()
+        self.sent = 0
+        self.failed = 0
         if not self.cfg.enabled:
             log.warning("[MAIL] Brak SNIPER_SMTP_USER/SNIPER_SMTP_PASSWORD - alerty e-mail wyłączone.")
         else:
@@ -150,9 +152,11 @@ class EmailNotifier:
     async def _send(self, offer):
         try:
             await self.send_now(offer)
+            self.sent += 1
             log.info("[MAIL] Wysłano alert dla %s -> %s", offer.id, self.cfg.recipient)
         except Exception as exc:
-            log.error("[MAIL] Nie udało się wysłać alertu dla %s: %s", offer.id, exc)
+            self.failed += 1
+            log.error("[MAIL] Nie udało się wysłać alertu dla %s: %r", offer.id, exc)
 
     async def drain(self, timeout=15.0):
         """Przy zamykaniu programu - daje szansę dokończyć wysyłkę maili w locie."""

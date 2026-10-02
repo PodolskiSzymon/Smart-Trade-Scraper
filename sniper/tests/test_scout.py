@@ -17,14 +17,46 @@ ACTIVE_ID = 9238023547
 SOLD_ID = 9272936873
 
 
-def test_dedup_deque_and_floor():
+def test_dedup_deque():
     seen = RecentIds(maxlen=3)
     assert all(seen.add(i) for i in (1, 2, 3))
     assert not seen.add(2)
     assert seen.add(4)            # wypycha 1
-    assert 1 in seen              # poniżej progu -> nadal "stare"
+    assert 1 not in seen
     assert seen.snapshot() == [2, 3, 4]
 
+
+def test_late_published_low_id_is_detected(monkeypatch):
+    """Ogłoszenie z niższym ID (np. szkic opublikowany później) musi zostać wykryte jako nowe."""
+    calls = {"n": 0}
+    page1 = list(range(1000, 1096))                 # 96 ofert
+    page2 = [500] + page1[:-1]                      # pojawia się ID 500 < wszystkich widzianych
+
+    def handler(request):
+        if request.url.host == "api.vinted.pl":
+            calls["n"] += 1
+            ids = page1 if calls["n"] == 1 else page2
+            return httpx.Response(200, json={"items": [{"id": i, "user": {}} for i in ids]})
+        return httpx.Response(500)
+
+    async def scenario():
+        session = VintedSession()
+        session.client = httpx.AsyncClient(transport=httpx.MockTransport(handler), headers=session.client.headers)
+        scout = Scout(ScoutConfig(category="3580", dedup_size=20), session, EmailNotifier(SmtpConfig()))
+        inspected = []
+
+        async def fake_inspect(item):
+            inspected.append(item["id"])
+        scout.inspect = fake_inspect
+        await scout.poll_catalog()      # rozgrzewka
+        await scout.poll_catalog()
+        await asyncio.gather(*scout._tasks)
+        await session.close()
+        return scout, inspected
+
+    scout, inspected = asyncio.run(scenario())
+    assert inspected == [500]
+    assert scout.seen.maxlen >= 500     # SNIPER_DEDUP_SIZE=20 podniesione do minimum
 
 def test_sold_and_active_status():
     assert inactive_reason(FIX["sidebar_sold"]) == "sold"
@@ -318,3 +350,25 @@ def test_empty_price_from_is_not_sent():
                    "&order=newest_first&attribute_ids%5Bcatalog%5D=3580&attribute_ids%5Bbrand%5D="
                    "&attribute_ids%5Bbrand_collection%5D=&attribute_ids%5Bstatus%5D=")
     assert get_catalog_params(category="3580", price_from="2000")["price_from"] == "2000"
+
+
+def test_price_to_and_catalog_from_env(monkeypatch):
+    from sniper.config import CATALOG_URL, get_catalog_params
+
+    url = str(httpx.Request("GET", CATALOG_URL, params=get_catalog_params(
+        category="3580", price_from="100", price_to="3000")).url)
+    assert "&price_from=100&price_to=3000&currency=PLN&" in url
+    assert "price_to" not in str(httpx.Request("GET", CATALOG_URL, params=get_catalog_params(category="3580")).url)
+
+    monkeypatch.setenv("SNIPER_CATALOG", "2994")
+    monkeypatch.setenv("SNIPER_PRICE_FROM", "150")
+    monkeypatch.setenv("SNIPER_PRICE_TO", "900")
+    import importlib
+    import sniper.config as config
+    importlib.reload(config)
+    try:
+        cfg = config.ScoutConfig()
+        assert (cfg.category, cfg.price_from, cfg.price_to) == ("2994", "150", "900")
+    finally:
+        monkeypatch.undo()
+        importlib.reload(config)

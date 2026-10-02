@@ -33,7 +33,25 @@ def catalog_params(cfg):
         order='newest_first',
         search_text=cfg.search_text,
         price_from=cfg.price_from,
+        price_to=cfg.price_to,
     )
+
+
+MIN_DEDUP = 500  # > 5 stron katalogu po 96 ofert
+
+
+def _catalog_price(item):
+    price = item.get("price")
+    if isinstance(price, dict):
+        return f"{price.get('amount', '?')} {price.get('currency_code', '')}".strip()
+    return str(price) if price is not None else "?"
+
+
+def _to_float(value):
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
 
 
 class Scout:
@@ -41,13 +59,18 @@ class Scout:
         self.cfg = cfg
         self.session = session
         self.notifier = notifier
-        self.seen = RecentIds(cfg.dedup_size)
+        if cfg.dedup_size < MIN_DEDUP:
+            log.warning("[SCOUT] SNIPER_DEDUP_SIZE=%d to za mało przy stronie 96 ofert - używam %d.",
+                        cfg.dedup_size, MIN_DEDUP)
+        self.seen = RecentIds(max(cfg.dedup_size, MIN_DEDUP))
         # Kolejka "złapanych" ofert dla przyszłego modułu AI (słowniki z Offer.to_dict()).
         self.offers = asyncio.Queue(maxsize=200)
         self._detail_slots = asyncio.Semaphore(cfg.max_concurrent_details)
         self._tasks = set()
         self._first_batch = cfg.skip_initial_batch
-        self._stats = {"polls": 0, "errors": 0, "new": 0, "caught": 0, "last_size": 0, "newest_id": None}
+        self._stats = {"polls": 0, "errors": 0, "new": 0, "caught": 0, "last_size": 0}
+        self._skipped = {}        # powód -> liczba (od ostatniego heartbeatu)
+        self._top_items = []      # pierwsze oferty z ostatniego skanu, w kolejności Vinted
         self._last_heartbeat = time.monotonic()
 
     # ------------------------------------------------------------------ katalog
@@ -59,8 +82,7 @@ class Scout:
         items = data.get("items") or []
         self._stats["polls"] += 1
         self._stats["last_size"] = len(items)
-        if items:
-            self._stats["newest_id"] = max(it["id"] for it in items)
+        self._top_items = items[:5]
         if not items:
             log.warning("[SCOUT] Pusty katalog (klucze odpowiedzi: %s) - możliwy soft-ban. Odświeżam sesję.",
                         ", ".join(data) if isinstance(data, dict) else type(data).__name__)
@@ -78,8 +100,9 @@ class Scout:
         self._stats["new"] += len(fresh)
         for item in fresh:
             self._spawn(self.inspect(item))
-        if fresh:
-            log.info("[SCOUT] Nowe ogłoszenia: %s", [it["id"] for it in fresh])
+        for it in fresh:
+            log.info("[SCOUT] Nowe ogłoszenie %s | %s | %s | %s",
+                     it["id"], it.get("title", "?"), _catalog_price(it), item_url(it["id"], it))
 
     def _spawn(self, coro):
         task = asyncio.create_task(coro)
@@ -100,6 +123,7 @@ class Scout:
 
         if isinstance(sidebar, Exception):
             log.error("[SCOUT] Brak detali dla %s: %r", item_id, sidebar)
+            self._skip("błąd detali")
             return
         if isinstance(shipping, Exception):
             log.warning("[SCOUT] Brak shipping_details dla %s: %r", item_id, shipping)
@@ -109,10 +133,22 @@ class Scout:
         reason = inactive_reason(sidebar)
         if reason:
             log.info("[SCOUT] Pomijam %s - status: %s", item_id, reason)
+            self._skip(f"status {reason}")
             return
 
         offer = build_offer(item_id, sidebar, shipping, catalog_item=item)
+        # Druga linia obrony: gdyby API zignorowało filtr ceny, odsiewamy tutaj.
+        low, high = _to_float(self.cfg.price_from), _to_float(self.cfg.price_to)
+        if offer.price is not None and ((low is not None and offer.price < low) or
+                                        (high is not None and offer.price > high)):
+            log.info("[SCOUT] Pomijam %s - cena %.2f poza zakresem %s-%s", item_id, offer.price,
+                     self.cfg.price_from or "0", self.cfg.price_to or "∞")
+            self._skip("cena poza zakresem")
+            return
         self.emit(offer)
+
+    def _skip(self, reason):
+        self._skipped[reason] = self._skipped.get(reason, 0) + 1
 
     def emit(self, offer):
         payload = offer.to_dict()
@@ -140,8 +176,9 @@ class Scout:
 
     # ------------------------------------------------------------------ pętla
     async def run(self):
-        log.info("=== ZWIADOWCA START | kategoria=%s (%s) | proxy=%s ===",
-                 self.cfg.category, self.cfg.catalog_id, "TAK" if self.cfg.proxy_url else "NIE")
+        log.info("=== ZWIADOWCA START | katalog=%s | cena %s-%s PLN | skan co %.0fs | proxy=%s ===",
+                 self.cfg.catalog_id, self.cfg.price_from or "0", self.cfg.price_to or "∞",
+                 self.cfg.poll_interval, "TAK" if self.cfg.proxy_url else "NIE")
         backoff = 0.0
         needs_refresh = True
         while True:
@@ -178,16 +215,24 @@ class Scout:
                 await asyncio.sleep(max(0.0, target - (time.monotonic() - started)))
 
     def _heartbeat(self):
-        """Co heartbeat_interval sekund jedna linia "żyję" - żeby cisza w logu nie wyglądała na zawieszenie."""
+        """Co heartbeat_interval sekund podsumowanie - żeby cisza w logu nie wyglądała na zawieszenie."""
         interval = self.cfg.heartbeat_interval
         if not interval or time.monotonic() - self._last_heartbeat < interval:
             return
         s = self._stats
-        log.info("[SCOUT] Żyję: %d skanów, %d błędów, nowych %d, złapanych %d w ostatnich %.0fs | "
-                 "katalog: %d ofert, najnowsze ID %s",
-                 s["polls"], s["errors"], s["new"], s["caught"], interval, s["last_size"], s["newest_id"])
+        skipped = ", ".join(f"{k}: {v}" for k, v in self._skipped.items()) or "0"
+        log.info("[SCOUT] Żyję (%.0fs): %d skanów, %d błędów | nowych %d, złapanych %d, pominiętych: %s | "
+                 "maile: wysłane %d, błędy %d | katalog: %d ofert",
+                 interval, s["polls"], s["errors"], s["new"], s["caught"], skipped,
+                 self.notifier.sent, self.notifier.failed, s["last_size"])
+        if self._top_items:
+            log.info("[SCOUT] Pierwsze oferty w katalogu (kolejność Vinted):")
+            for it in self._top_items:
+                log.info("    %s | %s | %s | %s", it.get("id"), it.get("title", "?"), _catalog_price(it),
+                         item_url(it.get("id"), it))
         for key in ("polls", "errors", "new", "caught"):
             s[key] = 0
+        self._skipped = {}
         self._last_heartbeat = time.monotonic()
 
     async def shutdown(self):

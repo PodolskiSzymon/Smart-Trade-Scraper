@@ -131,7 +131,7 @@ categories = {
 CATEGORIES = categories
 
 
-def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', brand_collection_ids='', status_ids='', price_from=''):
+def get_catalog_params(category, order='newest_first', page=1, search_text='', brand_ids='', brand_collection_ids='', status_ids='', price_from='', price_to=''):
     """Kopia session_management.get_catalog_params - parametry 1:1 z działającego zapytania (cURL z przeglądarki).
 
     Jedyna różnica: kategoria spoza słownika (np. "3580") jest używana wprost jako attribute_ids[catalog],
@@ -143,6 +143,7 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
         'per_page': 96,
         'search_text': search_text,
         'price_from': price_from,
+        'price_to': price_to,
         'currency': 'PLN',
         'order': order,
         'attribute_ids[catalog]': catalog_ids,
@@ -150,10 +151,11 @@ def get_catalog_params(category, order='newest_first', page=1, search_text='', b
         'attribute_ids[brand_collection]': brand_collection_ids,
         'attribute_ids[status]': status_ids,
     }
-    # Vinted odrzuca puste price_from= (400 INVALID_REQUEST) - wysyłamy je tylko z wartością,
+    # Vinted odrzuca puste price_from= (400 INVALID_REQUEST) - ceny wysyłamy tylko z wartością,
     # tak jak przeglądarka. Pozostałe puste pola (search_text, attribute_ids[...]) są akceptowane.
-    if price_from in ('', None):
-        del params['price_from']
+    for key in ('price_from', 'price_to'):
+        if params[key] in ('', None):
+            del params[key]
     return params
 
 
@@ -185,10 +187,14 @@ class ScoutConfig:
     # Zbudowane z SNIPER_PROXY_HOST + SNIPER_PROXY_AUTH (albo SNIPER_PROXY_URL) - patrz build_proxy_url().
     proxy_url: str = field(default_factory=build_proxy_url)
 
-    category: str = _env("SNIPER_CATEGORY", "karty_pamieci")
+    # Kategoria: numer catalog_id z Vinted (np. 3580 = laptopy) albo nazwa z CATEGORIES.
+    # SNIPER_CATALOG ma pierwszeństwo, SNIPER_CATEGORY zostaje dla zgodności.
+    category: str = _env("SNIPER_CATALOG") or _env("SNIPER_CATEGORY", "karty_pamieci")
     search_text: str = _env("SNIPER_SEARCH_TEXT")
     price_from: str = _env("SNIPER_PRICE_FROM", "100")   # minimalna cena w PLN (puste = bez filtra)
-    dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 20)
+    price_to: str = _env("SNIPER_PRICE_TO")               # maksymalna cena w PLN (puste = bez filtra)
+    # Pamięć ID - musi być kilka razy większa niż strona katalogu (96); poniżej 500 jest podnoszona.
+    dedup_size: int = _env_int("SNIPER_DEDUP_SIZE", 500)
 
     # Odstęp między STARTAMI kolejnych skanów katalogu: 15 s = 4 skany na minutę (oszczędza transfer proxy)
     poll_interval: float = _env_float("SNIPER_POLL_INTERVAL", 15.0)
