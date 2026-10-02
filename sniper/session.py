@@ -10,7 +10,7 @@ from urllib.parse import unquote, urlsplit
 import httpx
 
 from .config import BASE_HEADERS, BASE_URL, BROWSER_USER_AGENT
-from .proxy_relay import ProxyRelay
+from .proxy_relay import PROXY_AUTH_HELP, ProxyAuthRejected, ProxyRelay
 from .traffic import TrafficMeter
 
 log = logging.getLogger("sniper.session")
@@ -101,7 +101,12 @@ async def _browse_via_proxy(proxy_url, wait_ms, meter=None):
     # więc idziemy przez lokalny przekaźnik, który sam dokleja Proxy-Authorization.
     on_bytes = (lambda sent, received: meter.add("browser", sent, received, requests=0)) if meter else None
     async with ProxyRelay(proxy_url, on_bytes=on_bytes) as relay:
-        return await _browse_vinted({"server": relay.server}, wait_ms)
+        try:
+            return await _browse_vinted({"server": relay.server}, wait_ms)
+        except Exception as exc:
+            if relay.auth_rejected:
+                raise ProxyAuthRejected(PROXY_AUTH_HELP) from exc
+            raise
 
 
 async def fetch_fresh_tokens(proxy_url=None, wait_ms=15000, meter=None):
@@ -196,6 +201,9 @@ class VintedSession:
                 return await asyncio.wait_for(fetch_fresh_tokens(self._proxy_url, self._browser_wait_ms,
                                                                  meter=self.traffic),
                                               self._refresh_timeout)
+            except ProxyAuthRejected as exc:
+                # Kolejne próby nic nie dadzą - złe dane albo brak transferu na koncie proxy.
+                raise SessionExpired(str(exc)) from exc
             except Exception as exc:
                 last_error = exc
                 reason = (str(exc).splitlines() or [""])[0] or type(exc).__name__

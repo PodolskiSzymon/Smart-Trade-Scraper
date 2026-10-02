@@ -20,6 +20,7 @@ from .config import CATALOG_ONLY_HEADERS, CATALOG_URL, SHIPPING_URL, SIDEBAR_URL
 from .dedup import RecentIds
 from .extractor import build_offer, inactive_reason, item_url, unwrap_sidebar
 from .notifier import EmailNotifier
+from .proxy_relay import PROXY_AUTH_HELP
 from .session import RateLimited, SessionExpired, VintedSession
 
 log = logging.getLogger("sniper.scout")
@@ -219,7 +220,11 @@ class Scout:
             except (httpx.TransportError, httpx.HTTPStatusError, ValueError) as exc:
                 # Błąd proxy/sieci/JSON - przy rotacyjnym proxy następne żądanie pójdzie z innego IP.
                 backoff = min(max(backoff * 2, 2.0), 30.0)
-                log.warning("[SCOUT] Błąd skanu: %r - ponawiam za %.0fs.", exc, backoff)
+                if isinstance(exc, httpx.ProxyError) and "407" in str(exc):
+                    backoff = self.cfg.refresh_backoff
+                    log.error("[SCOUT] %s Ponawiam za %.0fs.", PROXY_AUTH_HELP, backoff)
+                else:
+                    log.warning("[SCOUT] Błąd skanu: %r - ponawiam za %.0fs.", exc, backoff)
                 self._stats["errors"] += 1
             except Exception:
                 # Nieprzewidziany błąd nie może zatrzymać pętli - logujemy pełny traceback i jedziemy dalej.

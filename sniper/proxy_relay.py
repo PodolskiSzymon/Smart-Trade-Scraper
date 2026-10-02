@@ -14,6 +14,17 @@ log = logging.getLogger("sniper.proxy_relay")
 
 _HEADER_LIMIT = 64 * 1024
 
+PROXY_AUTH_HELP = (
+    "IPRoyal odrzucił dane logowania (407 Proxy Authentication Required). Sprawdź: "
+    "1) saldo transferu / ważność planu w panelu IPRoyal, "
+    "2) SNIPER_PROXY_AUTH (LOGIN:HASLO_country-pl) w sniper/.env - literówka albo nowe hasło, "
+    "3) ograniczenia dostępu (whitelist IP) w ustawieniach IPRoyal."
+)
+
+
+class ProxyAuthRejected(Exception):
+    """Proxy odpowiedziało 407 - złe dane logowania albo konto bez transferu."""
+
 
 async def _pipe(reader, writer, count=None):
     try:
@@ -44,6 +55,7 @@ class ProxyRelay:
         self._auth = b"Proxy-Authorization: Basic " + base64.b64encode(credentials.encode()) + b"\r\n"
         self._server = None
         self._connections = set()
+        self.auth_rejected = False     # True, jeśli upstream odpowiedział 407
 
     @property
     def server(self):
@@ -86,6 +98,17 @@ class ProxyRelay:
             self._count_sent(len(new_head))
             upstream_writer.write(new_head)
             await upstream_writer.drain()
+
+            # Odpowiedź proxy czytamy sami, żeby rozpoznać 407 (Chromium pokazuje wtedy tylko
+            # mylące net::ERR_PROXY_AUTH_UNSUPPORTED), a potem przekazujemy ją przeglądarce bez zmian.
+            reply = await upstream_reader.readuntil(b"\r\n\r\n")
+            status = reply.split(b" ", 2)[1:2]
+            if status == [b"407"] and not self.auth_rejected:
+                self.auth_rejected = True
+                log.error("[RELAY] %s", PROXY_AUTH_HELP)
+            self._count_received(len(reply))
+            client_writer.write(reply)
+            await client_writer.drain()
 
             await asyncio.gather(
                 _pipe(client_reader, upstream_writer, self._count_sent),

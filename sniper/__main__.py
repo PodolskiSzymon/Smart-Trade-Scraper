@@ -3,6 +3,7 @@ import asyncio
 import logging
 import logging.handlers
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .config import ScoutConfig, require_proxy_url
 from .notifier import EmailNotifier
@@ -48,6 +49,10 @@ async def main():
     setup_logging(cfg.log_dir)
     logging.getLogger("sniper").info("Logi zapisuję do: %s", Path(cfg.log_dir).resolve())
     require_proxy_url()  # bez proxy Zwiadowca w ogóle nie startuje (SNIPER_REQUIRE_PROXY)
+    proxy = urlsplit(cfg.proxy_url)
+    logging.getLogger("sniper").info(
+        "Proxy: %s:%s | login: %s | hasło: %s", proxy.hostname, proxy.port,
+        "TAK" if proxy.username else "BRAK", "TAK" if proxy.password else "BRAK")
 
     session = VintedSession(
         proxy_url=cfg.proxy_url,

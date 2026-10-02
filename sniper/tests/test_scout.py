@@ -541,3 +541,31 @@ def test_relay_counts_browser_bytes():
     asyncio.run(scenario())
     assert counted["received"] >= 5000
     assert counted["sent"] >= 100 + len(b"CONNECT www.vinted.pl:443 HTTP/1.1\r\n\r\n")
+
+
+def test_relay_detects_407_from_proxy():
+    """IPRoyal 407 (złe hasło / brak transferu) -> relay.auth_rejected, odpowiedź przekazana przeglądarce."""
+    from sniper.proxy_relay import ProxyRelay
+
+    async def upstream(reader, writer):
+        await reader.readuntil(b"\r\n\r\n")
+        writer.write(b"HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n")
+        await writer.drain()
+        writer.close()
+
+    async def scenario():
+        server = await asyncio.start_server(upstream, "127.0.0.1", 0)
+        port = server.sockets[0].getsockname()[1]
+        async with ProxyRelay(f"http://U:ZLE@127.0.0.1:{port}") as relay:
+            host, rport = relay.server.rsplit("/", 1)[1].split(":")
+            reader, writer = await asyncio.open_connection(host, int(rport))
+            writer.write(b"CONNECT www.vinted.pl:443 HTTP/1.1\r\n\r\n")
+            await writer.drain()
+            reply = await reader.readuntil(b"\r\n\r\n")
+            writer.close()
+            rejected = relay.auth_rejected
+        server.close()
+        return reply, rejected
+
+    reply, rejected = asyncio.run(scenario())
+    assert reply.startswith(b"HTTP/1.1 407") and rejected
